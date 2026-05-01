@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { AddressCard } from "@/components/buyers/address-card";
 import { OutcomeMarker } from "@/components/buyers/outcome-marker";
 import { PhoneCard } from "@/components/buyers/phone-card";
+import { ShareLinkButton } from "@/components/buyers/share-link-button";
 import { TrustScoreGauge } from "@/components/buyers/trust-score-gauge";
 import { Badge } from "@/components/ui/badge";
 import { getSupabasePublicKey, getSupabaseUrl } from "@/lib/supabase/config";
@@ -118,6 +119,8 @@ export default async function BuyerDetailPage({ params }: { params: { id: string
       </section>
 
       <aside className="space-y-4 lg:col-span-2">
+        <ShareLinkButton />
+
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
           <h3 className="mb-2 text-sm font-semibold text-slate-500">Buyer Info</h3>
           <p className="font-medium">@{buyer.instagram_username}</p>

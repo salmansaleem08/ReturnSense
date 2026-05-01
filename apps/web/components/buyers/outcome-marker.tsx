@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { pushToast } from "@/components/ui/toaster";
 
 const outcomeOptions = [
   { id: "delivered", label: "Delivered" },
@@ -47,9 +48,12 @@ export function OutcomeMarker({
       });
       const payload = await res.json();
       if (!res.ok) throw new Error(payload.error || "Failed to update");
+      pushToast({ title: "Outcome updated", description: `Buyer marked as ${outcome}.` });
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unexpected error");
+      const message = e instanceof Error ? e.message : "Unexpected error";
+      setError(message);
+      pushToast({ title: "Failed to update outcome", description: message, variant: "destructive" });
     } finally {
       setLoading(false);
     }

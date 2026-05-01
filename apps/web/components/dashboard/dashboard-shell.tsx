@@ -63,7 +63,7 @@ export function DashboardShell({ children, email, plan }: DashboardShellProps) {
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-7xl gap-4 px-4 py-6">
+      <div className="mx-auto flex max-w-7xl gap-4 px-4 py-6 pb-24 md:pb-6">
         <aside
           className={cn(
             "fixed inset-y-0 left-0 z-40 w-64 border-r border-slate-200 bg-white p-4 transition-transform md:static md:translate-x-0 md:rounded-2xl md:border",
@@ -95,6 +95,28 @@ export function DashboardShell({ children, email, plan }: DashboardShellProps) {
 
         <main className="w-full">{children}</main>
       </div>
+
+      <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white md:hidden">
+        <div className="grid grid-cols-4">
+          {navItems.map((item) => {
+            const active = pathname === item.href;
+            const Icon = item.icon;
+            return (
+              <Link
+                key={`mobile-${item.href}`}
+                href={item.href}
+                className={cn(
+                  "flex flex-col items-center gap-1 py-2 text-[11px]",
+                  active ? "text-slate-900" : "text-slate-500"
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
 }
