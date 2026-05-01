@@ -49,8 +49,9 @@ export const POST = withAuth(async ({ req, user }) => {
   try {
     const body = await req.json();
     let { messages, username, phone, address } = body;
+    username = typeof username === "string" && username.trim().length ? username.trim() : "unknown_buyer";
     messages = normalizeMessages(messages);
-    if (!messages || messages.length < 2 || !username) {
+    if (!messages || messages.length < 2) {
       return apiError("Not enough chat data", 400);
     }
 

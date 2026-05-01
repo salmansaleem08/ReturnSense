@@ -188,7 +188,7 @@ function renderPanelBase(username) {
 
 function openAnalysisPanel() {
   const messages = extractChatMessages();
-  const username = extractBuyerUsername();
+  const username = extractBuyerUsername() || "unknown_buyer";
   renderPanelBase(username);
   document.getElementById("rs-submit-analysis")?.addEventListener("click", () => {
     const phone = document.getElementById("rs-phone")?.value || "";
@@ -233,7 +233,12 @@ async function submitForAnalysis({ messages, username, phone, address }) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({ messages, username, phone, address })
+      body: JSON.stringify({
+        messages,
+        username: username || "unknown_buyer",
+        phone,
+        address
+      })
     });
 
     const result = await res.json();
