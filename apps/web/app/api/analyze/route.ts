@@ -10,13 +10,46 @@ function formatChatForStorage(messages: Array<{ role: string; text: string }>) {
   return messages.map((m) => `[${m.role.toUpperCase()}] ${m.text}`).join("\n").slice(0, 12000);
 }
 
+/** Instagram fallback often sends one transcript blob; Gemini still needs a turn structure. */
+function normalizeMessages(messages: Array<{ role: string; text: string }> | null | undefined) {
+  if (!messages?.length) return [];
+  if (messages.length >= 2) return messages;
+  const text = (messages[0]?.text ?? "").trim();
+  if (text.length < 80) return messages;
+
+  let segments = text
+    .split(/\n{2,}/)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 3);
+  if (segments.length < 2) {
+    segments = text
+      .split("\n")
+      .map((s) => s.trim())
+      .filter((s) => s.length >= 3);
+  }
+  if (segments.length >= 2) {
+    return segments.map((chunk, i) => ({
+      role: i % 2 === 0 ? "buyer" : "seller",
+      text: chunk
+    }));
+  }
+
+  const mid = Math.floor(text.length / 2);
+  return [
+    { role: messages[0]?.role || "buyer", text: text.slice(0, mid).trim() },
+    { role: "seller", text: text.slice(mid).trim() }
+  ];
+}
+
 export async function OPTIONS() {
   return new Response(null, { status: 204, headers: corsHeaders });
 }
 
 export const POST = withAuth(async ({ req, user }) => {
   try {
-    const { messages, username, phone, address } = await req.json();
+    const body = await req.json();
+    let { messages, username, phone, address } = body;
+    messages = normalizeMessages(messages);
     if (!messages || messages.length < 2 || !username) {
       return apiError("Not enough chat data", 400);
     }

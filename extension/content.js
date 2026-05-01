@@ -41,17 +41,53 @@ function queryAllWithFallbacks(selectors) {
   return [];
 }
 
+/**
+ * When structured message nodes are not found, Instagram still exposes the thread as plain text.
+ * The API needs at least 2 messages — never send a single giant blob.
+ */
 function extractChatFallback() {
   const main = document.querySelector("[role='main']");
   if (!main) return [];
-  const rawText = main.innerText;
-  return [{ role: "unknown", text: rawText, timestamp: null }];
+  const rawText = (main.innerText || "").trim();
+  if (!rawText) return [];
+
+  let segments = rawText
+    .split(/\n{2,}/)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 3);
+
+  if (segments.length < 2) {
+    segments = rawText
+      .split("\n")
+      .map((s) => s.trim())
+      .filter((s) => s.length >= 3);
+  }
+
+  if (segments.length < 2 && rawText.length >= 80) {
+    const mid = Math.floor(rawText.length / 2);
+    const a = rawText.slice(0, mid).trim();
+    const b = rawText.slice(mid).trim();
+    segments = [a, b].filter((s) => s.length >= 2);
+  }
+
+  if (segments.length < 2) {
+    return [];
+  }
+
+  return segments.map((text, i) => ({
+    role: i % 2 === 0 ? "buyer" : "seller",
+    text,
+    timestamp: null
+  }));
 }
 
 function extractChatMessages() {
   const messageNodes = queryAllWithFallbacks([
     "[role='listitem']",
+    "[role='row']",
     "[data-testid*='message']",
+    "div[role='row']",
+    "[class*='messageList'] [role='presentation']",
     "[class*='message']"
   ]);
 
@@ -72,6 +108,11 @@ function extractChatMessages() {
       timestamp: el.querySelector("time")?.getAttribute("datetime") || null
     });
   });
+
+  if (messages.length < 2) {
+    const fallback = extractChatFallback();
+    if (fallback.length >= 2) return fallback;
+  }
 
   if (!messages.length) {
     return extractChatFallback();
