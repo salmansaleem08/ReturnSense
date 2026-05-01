@@ -4,10 +4,18 @@
   "version": "1.0.0",
   "description": "AI buyer risk analysis for Instagram sellers",
   "permissions": ["storage", "activeTab", "scripting"],
-  "host_permissions": ["https://www.instagram.com/*"],
+  "host_permissions": [
+    "https://www.instagram.com/*",
+    "https://instagram.com/*",
+    "https://m.instagram.com/*"
+  ],
   "background": { "service_worker": "background.js" },
   "content_scripts": [{
-    "matches": ["https://www.instagram.com/*"],
+    "matches": [
+      "https://www.instagram.com/*",
+      "https://instagram.com/*",
+      "https://m.instagram.com/*"
+    ],
     "js": ["content.js"],
     "css": ["styles.css"],
     "run_at": "document_idle"

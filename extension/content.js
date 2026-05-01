@@ -1,7 +1,19 @@
-const API_BASE = "https://your-vercel-app.vercel.app";
+const API_BASE = "https://return-sense-web.vercel.app";
 
-if (!window.location.href.includes("/direct/")) {
-  // Guard: extension logic only runs on Instagram DMs.
+function isInstagramHost() {
+  const host = window.location.hostname.replace(/^www\./, "");
+  return host === "instagram.com" || host === "m.instagram.com";
+}
+
+/** Instagram DM URLs are under /direct/... (inbox, thread, new). */
+function isDirectMessagesPage() {
+  if (!isInstagramHost()) return false;
+  const path = window.location.pathname || "";
+  return path === "/direct" || path.startsWith("/direct/");
+}
+
+if (!isDirectMessagesPage()) {
+  // Guard: only activate in Direct inbox / a thread.
 } else {
   let observerStarted = false;
   let pendingDebounce = null;
@@ -69,12 +81,24 @@ if (!window.location.href.includes("/direct/")) {
     return messages;
   }
 
-  function extractBuyerUsername() {
-    const header = queryWithFallbacks([
+  function findChatHeaderToolbar() {
+    return queryWithFallbacks([
       "[role='main'] header",
+      "[role='main'] [role='banner']",
+      "[role='main'] div[role='banner']",
+      "main header",
+      "[role='main'] > div > div:first-child",
+      "[data-testid*='conversation'] header",
       "[data-testid*='thread'] header",
+      "[aria-label*='Conversation']",
+      "div[role='main'] header",
+      "section[role='main'] header",
       "div[class*='x1n2onr6'] header"
     ]);
+  }
+
+  function extractBuyerUsername() {
+    const header = findChatHeaderToolbar();
 
     if (!header) return null;
 
@@ -229,21 +253,45 @@ if (!window.location.href.includes("/direct/")) {
     document.getElementById("rs-close-panel")?.addEventListener("click", closePanel);
   }
 
-  function tryInjectButton() {
-    if (document.getElementById("rs-analyze-btn")) return;
-    const header = queryWithFallbacks([
-      "[role='main'] header",
-      "[data-testid*='thread'] header",
-      "div[class*='x1n2onr6'] header"
-    ]);
-    if (!header) return;
+  function removeFloatingAnalyzeButton() {
+    document.getElementById("rs-analyze-fab")?.remove();
+  }
 
-    const btn = document.createElement("button");
-    btn.id = "rs-analyze-btn";
-    btn.className = "rs-btn";
-    btn.textContent = "🛡 Analyze Buyer";
-    btn.addEventListener("click", openAnalysisPanel);
-    header.appendChild(btn);
+  function ensureFloatingAnalyzeButton() {
+    if (document.getElementById("rs-analyze-btn") || document.getElementById("rs-analyze-fab")) return;
+    const fab = document.createElement("button");
+    fab.id = "rs-analyze-fab";
+    fab.type = "button";
+    fab.className = "rs-fab";
+    fab.textContent = "🛡 Analyze";
+    fab.title = "ReturnSense — analyze this chat";
+    fab.setAttribute("aria-label", "ReturnSense analyze buyer");
+    fab.addEventListener("click", openAnalysisPanel);
+    document.body.appendChild(fab);
+  }
+
+  function tryInjectButton() {
+    if (document.getElementById("rs-analyze-btn")) {
+      removeFloatingAnalyzeButton();
+      return;
+    }
+
+    const header = findChatHeaderToolbar();
+    if (header) {
+      removeFloatingAnalyzeButton();
+      const btn = document.createElement("button");
+      btn.id = "rs-analyze-btn";
+      btn.type = "button";
+      btn.className = "rs-btn";
+      btn.textContent = "🛡 Analyze Buyer";
+      btn.title = "ReturnSense — analyze this buyer";
+      btn.addEventListener("click", openAnalysisPanel);
+      header.appendChild(btn);
+      return;
+    }
+
+    // Instagram changes DOM often; floating button keeps the feature usable.
+    ensureFloatingAnalyzeButton();
   }
 
   function tryDetectChat() {

@@ -21,6 +21,27 @@ body {
   background: #1d4ed8;
 }
 
+/* Always-visible fallback when chat header cannot be found (Instagram DOM changes). */
+.rs-fab {
+  position: fixed;
+  right: 16px;
+  bottom: 88px;
+  z-index: 999998;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.25);
+}
+
+.rs-fab:hover {
+  background: #1d4ed8;
+}
+
 .rs-panel {
   position: fixed;
   top: 0;

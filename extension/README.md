@@ -5,7 +5,10 @@
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
 3. Click **Load unpacked**.
-4. Select the `extension/` folder from this repository.
+4. Select the **`extension/`** folder at the repo root (not `extensions/chrome-extension`).
+5. After any code change, click **Reload** on the extension card.
+
+Use **`https://www.instagram.com`** (or `instagram.com`) and open **Direct** so the URL contains `/direct/` (for example `/direct/inbox/` or `/direct/t/...`). If the in-header button does not appear, look for the blue **floating “Analyze”** button (bottom-right).
 
 ## Configure API URL
 
