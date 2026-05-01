@@ -4,6 +4,19 @@ export interface ChatMessage {
   timestamp?: string | null;
 }
 
+export interface AiStructuredResult {
+  ai_trust_score: number;
+  ai_risk_level: string;
+  ai_hesitation_detected: boolean;
+  ai_buyer_seriousness: string;
+  ai_reasons: string[];
+  positive_signals: string[];
+  negative_signals: string[];
+  recommendation: string;
+  analyst_notes: string;
+  ai_raw_response: Record<string, unknown>;
+}
+
 export const SYSTEM_PROMPT = `
 You are a behavioral risk analyst for an e-commerce buyer verification system.
 Your job is to analyze Instagram buyer conversations and identify psychological
@@ -54,7 +67,7 @@ Return ONLY this JSON structure:
   `;
 }
 
-export async function analyzeWithOpenRouter(messages: ChatMessage[], username: string) {
+export async function analyzeWithOpenRouter(messages: ChatMessage[], username: string): Promise<AiStructuredResult> {
   const prompt = buildAnalysisPrompt(messages, username);
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
@@ -73,8 +86,32 @@ export async function analyzeWithOpenRouter(messages: ChatMessage[], username: s
     })
   });
   const data = await res.json();
-  const text = data.choices[0].message.content;
+  const text = data?.choices?.[0]?.message?.content;
+  if (!text || typeof text !== "string") {
+    throw new Error(data?.error?.message || "OpenRouter returned no content");
+  }
   const cleaned = text.replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(cleaned);
-  return { ai_trust_score: parsed.trust_score, ...parsed, ai_raw_response: parsed };
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(cleaned) as Record<string, unknown>;
+  } catch {
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start === -1 || end === -1 || end <= start) {
+      throw new Error("OpenRouter response was not valid JSON");
+    }
+    parsed = JSON.parse(cleaned.slice(start, end + 1)) as Record<string, unknown>;
+  }
+  return {
+    ai_trust_score: Number(parsed.trust_score ?? 50),
+    ai_risk_level: String(parsed.risk_level ?? "medium"),
+    ai_hesitation_detected: Boolean(parsed.hesitation_detected),
+    ai_buyer_seriousness: String(parsed.buyer_seriousness ?? "moderate"),
+    ai_reasons: Array.isArray(parsed.reasons) ? (parsed.reasons as string[]) : [],
+    positive_signals: Array.isArray(parsed.positive_signals) ? (parsed.positive_signals as string[]) : [],
+    negative_signals: Array.isArray(parsed.negative_signals) ? (parsed.negative_signals as string[]) : [],
+    recommendation: String(parsed.recommendation ?? "caution"),
+    analyst_notes: String(parsed.analyst_notes ?? ""),
+    ai_raw_response: parsed
+  };
 }

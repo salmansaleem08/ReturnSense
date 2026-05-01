@@ -95,7 +95,7 @@ export const POST = withAuth(async ({ req, user }) => {
         buyer_id: buyer.id,
         trust_score: finalScore,
         risk_level: riskLevel,
-        ai_reasons: aiResult.ai_reasons ?? aiResult.reasons ?? [],
+        ai_reasons: aiResult.ai_reasons,
         signals,
         phone_analysis: phoneResult,
         address_analysis: addressResult,
