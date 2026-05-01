@@ -1,6 +1,5 @@
 const requiredVars = [
   "NEXT_PUBLIC_SUPABASE_URL",
-  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
   "GEMINI_API_KEY",
   "OPENROUTER_API_KEY",
@@ -10,7 +9,15 @@ const requiredVars = [
 ] as const;
 
 export function validateEnv() {
-  const missing = requiredVars.filter((key) => !process.env[key]);
+  const missing: string[] = requiredVars.filter((key) => !process.env[key]);
+  const hasPublicSupabaseKey =
+    Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) ||
+    Boolean(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+
+  if (!hasPublicSupabaseKey) {
+    missing.push("NEXT_PUBLIC_SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
+  }
+
   if (missing.length > 0) {
     throw new Error(`Missing required environment variables: ${missing.join(", ")}`);
   }

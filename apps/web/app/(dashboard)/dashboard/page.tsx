@@ -11,6 +11,7 @@ import {
   TableHeader,
   TableRow
 } from "@/components/ui/table";
+import { getSupabasePublicKey, getSupabaseUrl } from "@/lib/supabase/config";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 function asNumber(value: number | null | undefined, fallback = 0) {
@@ -20,8 +21,8 @@ function asNumber(value: number | null | undefined, fallback = 0) {
 export default async function DashboardPage() {
   const cookieStore = cookies();
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    getSupabaseUrl(),
+    getSupabasePublicKey(),
     {
       cookies: {
         getAll() {
