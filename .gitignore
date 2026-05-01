@@ -1,0 +1,43 @@
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Build outputs
+dist/
+build/
+.next/
+coverage/
+.turbo/
+node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Chrome extension artifacts
+extensions/chrome-extension/dist/
+extensions/chrome-extension/.parcel-cache/
+
+# Internal docs (must never be pushed)
+ReturnSense_Blueprint.docx

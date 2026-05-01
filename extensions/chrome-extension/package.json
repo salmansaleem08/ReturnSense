@@ -1,0 +1,8 @@
+{
+  "name": "@returnsense/chrome-extension",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "lint": "echo \"Add extension linting when build tooling is introduced.\""
+  }
+}

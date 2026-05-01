@@ -1,0 +1,16 @@
+{
+  "name": "returnsense",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "extensions/*"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace @returnsense/web run dev",
+    "build:web": "npm --workspace @returnsense/web run build",
+    "lint:web": "npm --workspace @returnsense/web run lint",
+    "typecheck:web": "npm --workspace @returnsense/web run typecheck"
+  }
+}
