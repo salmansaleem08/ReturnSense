@@ -8,7 +8,9 @@
 4. Select the **`extension/`** folder at the repo root (not `extensions/chrome-extension`).
 5. After any code change, click **Reload** on the extension card.
 
-Use **`https://www.instagram.com`** (or `instagram.com`) and open **Direct** so the URL contains `/direct/` (for example `/direct/inbox/` or `/direct/t/...`). If the in-header button does not appear, look for the blue **floating “Analyze”** button (bottom-right).
+Use **`https://www.instagram.com`** (or `instagram.com`) and open **Direct** so the URL contains `/direct/` (for example [`/direct/t/…`](https://www.instagram.com/direct/t/102828337785311/) thread URLs). Instagram is a **single-page app**: opening DMs often does **not** reload the page, so the extension watches URL changes—after updating, use **Reload** on `chrome://extensions`.
+
+If the in-header button does not appear, use the blue **floating “Analyze”** button (bottom-right).
 
 ## Configure API URL
 
