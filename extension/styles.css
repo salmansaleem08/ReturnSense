@@ -148,6 +148,8 @@ body {
 .rs-popup {
   width: 340px;
   padding: 14px;
+  display: grid;
+  gap: 12px;
 }
 
 .rs-popup-header {
@@ -161,4 +163,57 @@ body {
   height: 18px;
   border-radius: 4px;
   background: #2563eb;
+}
+
+.rs-popup-root {
+  display: grid;
+  gap: 10px;
+}
+
+.rs-popup-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.rs-popup-input {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+.rs-popup-button {
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rs-popup-button-primary {
+  background: #2563eb;
+  color: #fff;
+}
+
+.rs-popup-button-danger {
+  background: #ef4444;
+  color: #fff;
+}
+
+.rs-connected {
+  color: #166534;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rs-popup-help {
+  font-size: 12px;
+  color: #475569;
+  line-height: 1.5;
 }
