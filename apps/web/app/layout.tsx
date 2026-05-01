@@ -1,6 +1,5 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { AppShell } from "../components/app-shell";
 import { Inter } from "next/font/google";
 import { cn } from "@/lib/utils";
 
@@ -16,9 +15,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={cn("font-sans", inter.variable)}>
-      <body>
-        <AppShell>{children}</AppShell>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
