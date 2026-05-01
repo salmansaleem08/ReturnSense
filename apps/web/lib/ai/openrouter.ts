@@ -1,0 +1,80 @@
+export interface ChatMessage {
+  role: string;
+  text: string;
+  timestamp?: string | null;
+}
+
+export const SYSTEM_PROMPT = `
+You are a behavioral risk analyst for an e-commerce buyer verification system.
+Your job is to analyze Instagram buyer conversations and identify psychological
+and behavioral signals that indicate risk of non-delivery, order cancellation,
+COD refusal, or fraudulent intent.
+
+You MUST respond with ONLY a valid JSON object. No markdown. No explanation.
+No preamble. Just the JSON object.
+
+Analyze the conversation for these behavioral signals:
+- Commitment level: Does buyer confirm clearly and directly?
+- Hesitation patterns: Repeated uncertainty, changing mind, vague answers
+- Address/contact evasion: Avoiding sharing complete delivery info
+- Urgency inconsistency: Artificial urgency then sudden silence
+- Bargaining aggression: Excessive or manipulative price negotiation
+- Communication consistency: Do answers match questions logically?
+- Engagement quality: Short dismissive replies vs detailed genuine interest
+- Commitment anchors: Did buyer explicitly confirm order, date, method?
+`;
+
+export function buildAnalysisPrompt(messages: ChatMessage[], username: string) {
+  const chatText = messages.map((m) => `[${m.role.toUpperCase()}]: ${m.text}`).join("\n");
+
+  return `
+Analyze this Instagram buyer conversation for buyer @${username}.
+
+CONVERSATION:
+---
+${chatText}
+---
+
+Return ONLY this JSON structure:
+{
+  "trust_score": <integer 0-100>,
+  "risk_level": "<low|medium|high|critical>",
+  "buyer_seriousness": "<low|moderate|high>",
+  "hesitation_detected": <true|false>,
+  "commitment_confirmed": <true|false>,
+  "address_evasion": <true|false>,
+  "bargaining_aggression": "<none|mild|aggressive>",
+  "communication_quality": "<poor|average|good>",
+  "positive_signals": ["<signal>", ...],
+  "negative_signals": ["<signal>", ...],
+  "reasons": ["<reason string>", ...],
+  "recommendation": "<proceed|caution|hold|reject>",
+  "analyst_notes": "<1-2 sentences of key observation>"
+}
+  `;
+}
+
+export async function analyzeWithOpenRouter(messages: ChatMessage[], username: string) {
+  const prompt = buildAnalysisPrompt(messages, username);
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "deepseek/deepseek-chat",
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.1,
+      max_tokens: 1024
+    })
+  });
+  const data = await res.json();
+  const text = data.choices[0].message.content;
+  const cleaned = text.replace(/```json|```/g, "").trim();
+  const parsed = JSON.parse(cleaned);
+  return { ai_trust_score: parsed.trust_score, ...parsed, ai_raw_response: parsed };
+}
