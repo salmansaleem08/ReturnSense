@@ -1,31 +1,13 @@
-import { createClient } from "@supabase/supabase-js";
-
+import { apiError, apiSuccess, corsHeaders, withAuth } from "@/lib/api/response";
 import { checkQuota } from "@/lib/db/profiles";
-import { getSupabasePublicKey, getSupabaseUrl } from "@/lib/supabase/config";
 import { supabaseAdmin } from "@/lib/supabase/server";
-
-const corsHeaders = {
-  "Content-Type": "application/json",
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization"
-};
 
 export async function OPTIONS() {
   return new Response(null, { status: 204, headers: corsHeaders });
 }
 
-export async function GET(req: Request) {
+export const GET = withAuth(async ({ user }) => {
   try {
-    const token = req.headers.get("authorization")?.replace("Bearer ", "");
-    if (!token) return Response.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
-
-    const supabase = createClient(getSupabaseUrl(), getSupabasePublicKey());
-    const {
-      data: { user }
-    } = await supabase.auth.getUser(token);
-    if (!user) return Response.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
-
     const [{ count: totalAnalyses = 0 }, { data: scoreRows = [] }, { count: scams = 0 }, { count: highRisk = 0 }, { count: pending = 0 }, quota] =
       await Promise.all([
         supabaseAdmin.from("buyers").select("*", { count: "exact", head: true }).eq("seller_id", user.id),
@@ -50,7 +32,7 @@ export async function GET(req: Request) {
     const returned = safeRows.filter((row) => row.outcome === "returned").length;
     const returnRate = delivered + returned > 0 ? Math.round((returned / (delivered + returned)) * 100) : 0;
 
-    return Response.json(
+    return apiSuccess(
       {
         total_analyses: totalAnalyses ?? 0,
         avg_trust_score: avgTrustScore,
@@ -60,11 +42,10 @@ export async function GET(req: Request) {
         pending_count: pending ?? 0,
         analyses_used: quota.used,
         analyses_limit: quota.limit
-      },
-      { headers: corsHeaders }
+      }
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to fetch stats";
-    return Response.json({ error: message }, { status: 500, headers: corsHeaders });
+    return apiError(message, 500);
   }
-}
+});
