@@ -1,8 +1,9 @@
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+"use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { StatsCard } from "@/components/stats-card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -11,90 +12,61 @@ import {
   TableHeader,
   TableRow
 } from "@/components/ui/table";
-import { getSupabasePublicKey, getSupabaseUrl } from "@/lib/supabase/config";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { TrustScoreBadge } from "@/components/buyers/trust-score-badge";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
-function asNumber(value: number | null | undefined, fallback = 0) {
-  return Number.isFinite(value) ? Number(value) : fallback;
-}
+export default function DashboardPage() {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const [stats, setStats] = useState<any>(null);
+  const [recent, setRecent] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-export default async function DashboardPage() {
-  const cookieStore = cookies();
-  const supabase = createServerClient(
-    getSupabaseUrl(),
-    getSupabasePublicKey(),
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll() {}
+  useEffect(() => {
+    async function load() {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        setLoading(false);
+        return;
       }
+
+      const [statsRes, recentRes] = await Promise.all([
+        fetch("/api/stats", { headers: { Authorization: `Bearer ${token}` } }),
+        supabase
+          .from("buyers")
+          .select("id,instagram_username,final_trust_score,final_risk_level,outcome,created_at")
+          .order("created_at", { ascending: false })
+          .limit(5)
+      ]);
+
+      if (statsRes.ok) {
+        setStats(await statsRes.json());
+      }
+      setRecent(recentRes.data ?? []);
+      setLoading(false);
     }
-  );
-
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-
-  if (!user) return null;
-
-  const [{ count: totalAnalyses = 0 }, { data: scoreRows }, { count: scams = 0 }, { count: highRisk = 0 }, { count: pending = 0 }, { data: recent }] =
-    await Promise.all([
-      supabaseAdmin
-        .from("buyers")
-        .select("*", { count: "exact", head: true })
-        .eq("seller_id", user.id),
-      supabaseAdmin
-        .from("buyers")
-        .select("final_trust_score,outcome")
-        .eq("seller_id", user.id),
-      supabaseAdmin
-        .from("buyers")
-        .select("*", { count: "exact", head: true })
-        .eq("seller_id", user.id)
-        .eq("outcome", "fake"),
-      supabaseAdmin
-        .from("buyers")
-        .select("*", { count: "exact", head: true })
-        .eq("seller_id", user.id)
-        .in("final_risk_level", ["high", "critical"]),
-      supabaseAdmin
-        .from("buyers")
-        .select("*", { count: "exact", head: true })
-        .eq("seller_id", user.id)
-        .eq("outcome", "pending"),
-      supabaseAdmin
-        .from("buyers")
-        .select("id,instagram_username,final_trust_score,final_risk_level,outcome,created_at")
-        .eq("seller_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(5)
-    ]);
-
-  const safeScoreRows = scoreRows ?? [];
-  const safeRecent = recent ?? [];
-
-  const validScores = safeScoreRows
-    .map((row) => row.final_trust_score)
-    .filter((score): score is number => typeof score === "number");
-  const avgTrust = validScores.length
-    ? Math.round(validScores.reduce((sum, score) => sum + score, 0) / validScores.length)
-    : 0;
-
-  const delivered = safeScoreRows.filter((row) => row.outcome === "delivered").length;
-  const returned = safeScoreRows.filter((row) => row.outcome === "returned").length;
-  const returnRate = delivered + returned > 0 ? Math.round((returned / (delivered + returned)) * 100) : 0;
+    load();
+  }, [supabase]);
 
   return (
     <div className="space-y-6">
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <StatsCard title="Total Analyses" value={`${asNumber(totalAnalyses)}`} helper="This month" />
-        <StatsCard title="Avg Trust Score" value={`${avgTrust}`} helper="Across analyzed buyers" />
-        <StatsCard title="Return Rate" value={`${returnRate}%`} helper="Returned over delivered + returned" />
-        <StatsCard title="Scams Detected" value={`${asNumber(scams)}`} />
-        <StatsCard title="High Risk Orders" value={`${asNumber(highRisk)}`} />
-        <StatsCard title="Pending Outcomes" value={`${asNumber(pending)}`} />
+        {loading ? (
+          <>
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <Skeleton key={idx} className="h-28" />
+            ))}
+          </>
+        ) : (
+          <>
+            <StatsCard title="Total Analyses" value={`${stats?.total_analyses ?? 0}`} helper="This month" />
+            <StatsCard title="Avg Trust Score" value={`${stats?.avg_trust_score ?? 0}`} helper="Across analyzed buyers" />
+            <StatsCard title="Return Rate" value={`${stats?.return_rate ?? 0}%`} helper="Returned over delivered + returned" />
+            <StatsCard title="Scams Detected" value={`${stats?.scams_detected ?? 0}`} />
+            <StatsCard title="High Risk Orders" value={`${stats?.high_risk_count ?? 0}`} />
+            <StatsCard title="Pending Outcomes" value={`${stats?.pending_count ?? 0}`} />
+          </>
+        )}
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -109,11 +81,11 @@ export default async function DashboardPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {safeRecent.length ? (
-              safeRecent.map((row) => (
+            {recent.length ? (
+              recent.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell>@{row.instagram_username}</TableCell>
-                  <TableCell>{row.final_trust_score ?? 0}</TableCell>
+                  <TableCell><TrustScoreBadge score={row.final_trust_score} /></TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="capitalize">
                       {row.final_risk_level ?? "unknown"}
@@ -131,6 +103,15 @@ export default async function DashboardPage() {
             )}
           </TableBody>
         </Table>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <h2 className="mb-3 text-lg font-semibold text-slate-900">How to Use Extension</h2>
+        <ol className="list-decimal space-y-2 pl-5 text-sm text-slate-700">
+          <li>Open Instagram DM and click <strong>Analyze Buyer</strong>.</li>
+          <li>Add phone and address details in the side panel.</li>
+          <li>Run analysis and review trust score before confirming COD order.</li>
+        </ol>
       </section>
     </div>
   );
