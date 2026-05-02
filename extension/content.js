@@ -267,7 +267,7 @@ function setRsLoadingStatus(text) {
  */
 async function extractChatMessages() {
   console.log("[RS] Starting message extraction on:", window.location.pathname);
-  console.log('[RS] document.querySelector("[role=main]") exists:', !!document.querySelector('[role="main"]'));
+  console.log('[RS] document.querySelector("[role=\"main\"]") exists:', !!document.querySelector('[role="main"]'));
 
   const loadingEl = document.getElementById("rs-loading-status");
   if (loadingEl) loadingEl.textContent = "Reading chat... (attempt 1/8)";
@@ -935,6 +935,15 @@ function showLoading() {
 }
 
 async function submitForAnalysis({ messages, username, phone, address }) {
+  console.log("[RS] === Analysis triggered ===");
+  console.log("[RS] Username:", username);
+  console.log("[RS] Messages count:", Array.isArray(messages) ? messages.length : 0);
+  console.log("[RS] Messages sample:", Array.isArray(messages) ? messages.slice(0, 5) : []);
+  console.log("[RS] Detected phone:", autoDetectPhone(Array.isArray(messages) ? messages : []));
+  console.log("[RS] Detected address:", autoDetectAddress(Array.isArray(messages) ? messages : []));
+  console.log("[RS] Submitted phone field:", phone);
+  console.log("[RS] Submitted address field:", address);
+
   lastUsername = username || "unknown_buyer";
   lastMessages = Array.isArray(messages) ? messages.slice() : [];
   lastSubmittedPhone = phone ?? null;
