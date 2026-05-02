@@ -92,9 +92,9 @@ function findMessageScrollContainer(within) {
   root.querySelectorAll("div").forEach((el) => {
     const st = window.getComputedStyle(el);
     const oy = st.overflowY;
-    if (oy !== "auto" && oy !== "scroll") return;
+    if (oy !== "auto" && oy !== "scroll" && oy !== "overlay") return;
     const h = el.scrollHeight - el.clientHeight;
-    if (h > 120 && el.scrollHeight > bestH) {
+    if (h > 40 && el.scrollHeight > bestH) {
       bestH = el.scrollHeight;
       best = el;
     }
@@ -102,20 +102,35 @@ function findMessageScrollContainer(within) {
   return best;
 }
 
-function findActiveThreadPanel() {
-  const header = findChatHeaderToolbar();
+/** Desktop DM: inbox left, thread right — prefer last main column. */
+function findRightThreadColumn() {
   const main = document.querySelector("[role='main']");
-  if (!header || !main) return main || document.body;
+  if (!main?.children?.length) return null;
+  const kids = main.children;
+  if (kids.length >= 2) return kids[kids.length - 1];
+  return main;
+}
 
-  let node = header.parentElement;
-  for (let i = 0; i < 22 && node; i++) {
-    const rows = node.querySelectorAll("[role='row'], [role='listitem'], div[role='presentation']");
-    if (rows.length >= 4) return node;
-    node = node.parentElement;
+function findActiveThreadPanel() {
+  const main = document.querySelector("[role='main']");
+  const rightCol = findRightThreadColumn();
+  const searchRoots = [rightCol, main].filter(Boolean);
+  const header = findChatHeaderToolbar();
+
+  if (header) {
+    let node = header.parentElement;
+    for (let i = 0; i < 24 && node; i++) {
+      const rows = node.querySelectorAll("[role='row'], [role='listitem'], div[role='presentation']");
+      if (rows.length >= 2) return node;
+      node = node.parentElement;
+    }
   }
 
-  const scrollHost = findMessageScrollContainer(main);
-  return scrollHost || main;
+  for (const r of searchRoots) {
+    const scrollHost = findMessageScrollContainer(r);
+    if (scrollHost) return scrollHost;
+  }
+  return rightCol || main || document.body;
 }
 
 /**
@@ -155,16 +170,12 @@ function dedupeMessages(messages) {
 }
 
 function sanitizeMessages(messages) {
-  const junkLine =
-    /^(Unread|Primary|General|Requests|Obsessed|Your note|Active|Verify|Analyze Buyer|sent an attachment|You forwarded|replied to you)/i;
-  const noiseShort = /^(·|…)$/;
-
+  const headerOnly = /^(Unread|Primary|General|Requests)$/i;
   return messages.filter((m) => {
     const t = (m.text || "").trim();
-    if (t.length < 2 || noiseShort.test(t)) return false;
-    const lines = t.split("\n").map((s) => s.trim()).filter(Boolean);
-    if (lines.some((line) => junkLine.test(line))) return false;
-    if (t.includes("Instagram") && t.length < 80) return false;
+    if (t.length < 1) return false;
+    const first = t.split("\n")[0].trim();
+    if (first.length < 80 && headerOnly.test(first) && t.split("\n").length === 1) return false;
     return true;
   });
 }
@@ -202,6 +213,10 @@ function extractChatMessages(threadRoot) {
 
   let cleaned = dedupeMessages(sanitizeMessages(messages));
 
+  if (cleaned.length < 2 && messages.length >= 2) {
+    cleaned = dedupeMessages(messages);
+  }
+
   if (cleaned.length < 2) {
     const fallback = dedupeMessages(sanitizeMessages(extractChatFallback(root)));
     if (fallback.length >= 2) return fallback;
@@ -212,6 +227,64 @@ function extractChatMessages(threadRoot) {
   }
 
   return cleaned;
+}
+
+/** Last resort: any row in thread without aggressive filtering. */
+function extractChatMessagesRelaxed() {
+  const root = findActiveThreadPanel();
+  const nodes = root.querySelectorAll("[role='row'], [role='listitem'], li[role='listitem']");
+  const out = [];
+  nodes.forEach((el) => {
+    const text = el.innerText?.trim();
+    if (!text || text.length < 1) return;
+    const computed = window.getComputedStyle(el);
+    const parentComputed = el.parentElement ? window.getComputedStyle(el.parentElement) : null;
+    const isSeller =
+      computed.justifyContent.includes("flex-end") ||
+      parentComputed?.justifyContent?.includes("flex-end") ||
+      el.closest("[style*='flex-end']") !== null;
+    out.push({
+      role: isSeller ? "seller" : "buyer",
+      text,
+      timestamp: el.querySelector("time")?.getAttribute("datetime") || null
+    });
+  });
+  const d = dedupeMessages(out);
+  return d.length >= 2 ? d : [];
+}
+
+const IG_USERNAME_RESERVED = new Set([
+  "p",
+  "reel",
+  "reels",
+  "stories",
+  "explore",
+  "direct",
+  "accounts",
+  "legal",
+  "about",
+  "popular",
+  "tagged",
+  "tv",
+  "common",
+  "www"
+]);
+
+function extractUsernameFromPageLinks() {
+  const main = document.querySelector("[role='main']");
+  const scope = main || document;
+  const links = scope.querySelectorAll('a[href*="instagram.com/"]');
+  let found = null;
+  links.forEach((a) => {
+    const href = a.getAttribute("href") || "";
+    const m = href.match(/instagram\.com\/([A-Za-z0-9._]+)\/?(?:\?|#|$)/);
+    if (!m) return;
+    const u = m[1];
+    if (IG_USERNAME_RESERVED.has(u.toLowerCase())) return;
+    if (u.length < 2 || u.length > 33) return;
+    found = u;
+  });
+  return found;
 }
 
 function findChatHeaderToolbar() {
@@ -231,25 +304,35 @@ function findChatHeaderToolbar() {
 }
 
 function extractBuyerUsername() {
+  const fromPage = extractUsernameFromPageLinks();
+  if (fromPage) return fromPage;
+
   const header = findChatHeaderToolbar();
+  if (!header) return extractUsernameFromPageLinks();
 
-  if (!header) return null;
-
-  const link = header.querySelector("a[href*='instagram.com']");
-  if (link?.href) {
-    const match = link.href.match(/instagram\.com\/([^/?#]+)/);
-    if (match) return match[1];
+  const anchors = header.querySelectorAll("a[href*='instagram.com']");
+  for (const link of anchors) {
+    const match = link.href.match(/instagram\.com\/([A-Za-z0-9._]+)/);
+    if (match && !IG_USERNAME_RESERVED.has(match[1].toLowerCase())) return match[1];
   }
 
-  const ariaTarget = header.querySelector("[aria-label]");
-  if (ariaTarget?.getAttribute("aria-label")) {
-    const label = ariaTarget.getAttribute("aria-label");
+  const ariaEls = header.querySelectorAll("[aria-label]");
+  for (const ariaTarget of ariaEls) {
+    const label = ariaTarget.getAttribute("aria-label") || "";
     const fromAt = label.match(/@([A-Za-z0-9._]+)/);
     if (fromAt) return fromAt[1];
+    const plain = label.trim();
+    if (/^[A-Za-z0-9._]+$/.test(plain) && plain.length >= 2 && plain.length <= 33) return plain;
   }
 
-  const span = header.querySelector("span[dir], span");
-  return span?.innerText?.replace("@", "").trim() || null;
+  const spans = header.querySelectorAll("span[dir], h1, h2, div[dir='auto']");
+  for (const span of spans) {
+    const raw = span.innerText?.trim() || "";
+    const oneLine = raw.split("\n")[0].replace("@", "").trim();
+    if (/^[A-Za-z0-9._]+$/.test(oneLine) && oneLine.length >= 2 && oneLine.length <= 33) return oneLine;
+  }
+
+  return extractUsernameFromPageLinks();
 }
 
 function closePanel() {
@@ -280,19 +363,24 @@ function renderPanelBase(username) {
 }
 
 async function openAnalysisPanel() {
-  const username = extractBuyerUsername() || "unknown_buyer";
-  renderLoadingPanel(username, "Loading full conversation… scroll may take a few seconds.");
+  renderLoadingPanel("…", "Loading full conversation…");
   try {
     await ensureChatHistoryLoaded();
   } catch (_e) {
     // Continue with whatever loaded.
   }
 
-  const messages = extractChatMessages();
+  let username =
+    extractBuyerUsername() || extractUsernameFromPageLinks() || "unknown_buyer";
+
+  let messages = extractChatMessages();
+  if (!messages || messages.length < 2) {
+    messages = extractChatMessagesRelaxed();
+  }
   if (!messages || messages.length < 2) {
     renderErrorPanel(
       username,
-      "Could not read enough messages in this thread. Open the chat thread fully and try again."
+      "Could not read enough messages. Open the DM thread (click the conversation), wait for messages to load, then tap Analyze again."
     );
     return;
   }
@@ -333,7 +421,7 @@ function renderErrorPanel(username, msg) {
       <div class="rs-panel-inner">
         <h3 class="rs-panel-title">ReturnSense</h3>
         <p><strong>@${username}</strong></p>
-        <p class="rs-popup-help" style="color:#ed4956;">${msg}</p>
+        <p class="rs-popup-help rs-error-text">${msg}</p>
       </div>
     `;
   document.body.appendChild(panel);
