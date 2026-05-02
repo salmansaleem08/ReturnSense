@@ -63,13 +63,15 @@ export interface AnalysisResult {
 }
 
 export interface PhoneResult {
-  phone_valid: boolean;
+  phone_valid: boolean | null;
   phone_carrier: string | null;
-  phone_is_voip: boolean;
+  phone_is_voip: boolean | null;
   phone_country: string | null;
-  phone_type?: string;
-  phone_local_format?: string;
-  phone_international_format?: string;
+  phone_type?: string | null;
+  phone_local_format?: string | null;
+  phone_international_format?: string | null;
+  configured?: boolean;
+  error?: string;
 }
 
 export interface AddressResult {
@@ -83,5 +85,7 @@ export interface AddressResult {
   address_found?: boolean;
   address_postal_code?: string | null;
   address_types?: string[];
-  address_precision?: string;
+  address_precision?: string | null;
+  configured?: boolean;
+  error?: string;
 }

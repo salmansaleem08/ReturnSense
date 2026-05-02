@@ -29,7 +29,7 @@ export async function getHistoricalData(phone?: string | null, username?: string
   if (username) filters.push(`instagram_username.eq.${username}`);
   const { data, error } = await supabaseAdmin
     .from("buyers")
-    .select("outcome")
+    .select("outcome, outcome_marked_at")
     .or(filters.join(","))
     .not("outcome", "eq", "pending");
   if (error) throw new Error(error.message);

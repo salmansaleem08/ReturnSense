@@ -1,7 +1,7 @@
 import { analyzeWithGemini } from "@/lib/ai/gemini";
 import { buyerRowPayloadFromAi } from "@/lib/ai/openrouter";
 import { logServerError } from "@/lib/api/log-server-error";
-import { apiError, apiSuccess, corsHeaders, withAuth } from "@/lib/api/response";
+import { apiError, corsHeaders, withAuth } from "@/lib/api/response";
 import { getHistoricalData, saveBuyer, saveSignals } from "@/lib/db/buyers";
 import { checkQuota, incrementUsage } from "@/lib/db/profiles";
 import { computeFinalScore } from "@/lib/risk/score-engine";
@@ -11,7 +11,7 @@ import type { PhoneResult } from "@/lib/validation/phone";
 import { validatePhone } from "@/lib/validation/phone";
 
 /** Only columns that exist on `public.buyers` — PostgREST rejects unknown keys. */
-function buyerPhoneDb(p: PhoneResult) {
+function buyerPhoneDb(p: PhoneResult & { phone_valid: boolean }) {
   return {
     phone_valid: p.phone_valid,
     phone_carrier: p.phone_carrier ?? null,
@@ -41,30 +41,36 @@ function normalizeMessages(messages: Array<{ role: string; text: string }> | nul
   if (!messages?.length) return [];
   if (messages.length >= 2) return messages;
   const text = (messages[0]?.text ?? "").trim();
-  if (text.length < 80) return messages;
-
-  let segments = text
-    .split(/\n{2,}/)
-    .map((s) => s.trim())
-    .filter((s) => s.length >= 3);
-  if (segments.length < 2) {
-    segments = text
-      .split("\n")
+  if (text.length >= 80) {
+    let segments = text
+      .split(/\n{2,}/)
       .map((s) => s.trim())
       .filter((s) => s.length >= 3);
+    if (segments.length < 2) {
+      segments = text
+        .split("\n")
+        .map((s) => s.trim())
+        .filter((s) => s.length >= 3);
+    }
+    if (segments.length >= 2) {
+      return segments.map((chunk, i) => ({
+        role: i % 2 === 0 ? "buyer" : "seller",
+        text: chunk
+      }));
+    }
+    const mid = Math.floor(text.length / 2);
+    return [
+      { role: messages[0]?.role || "buyer", text: text.slice(0, mid).trim() },
+      { role: "seller", text: text.slice(mid).trim() }
+    ];
   }
-  if (segments.length >= 2) {
-    return segments.map((chunk, i) => ({
-      role: i % 2 === 0 ? "buyer" : "seller",
-      text: chunk
-    }));
+  if (messages.length === 1 && text.length > 0) {
+    return [
+      { role: messages[0]?.role || "buyer", text },
+      { role: "seller", text: "[No additional messages captured in thread]" }
+    ];
   }
-
-  const mid = Math.floor(text.length / 2);
-  return [
-    { role: messages[0]?.role || "buyer", text: text.slice(0, mid).trim() },
-    { role: "seller", text: text.slice(mid).trim() }
-  ];
+  return messages;
 }
 
 export async function OPTIONS() {
@@ -74,7 +80,12 @@ export async function OPTIONS() {
 export const POST = withAuth(async ({ req, user }) => {
   try {
     const body = await req.json();
-    let { messages, username, phone, address } = body;
+    let { messages, username, phone, address } = body as {
+      messages?: Array<{ role: string; text: string }>;
+      username?: string;
+      phone?: string | null;
+      address?: string | null;
+    };
     if (typeof phone === "string") phone = phone.trim();
     if (typeof address === "string") address = address.trim();
     username = typeof username === "string" && username.trim().length ? username.trim() : "unknown_buyer";
@@ -88,9 +99,11 @@ export const POST = withAuth(async ({ req, user }) => {
       return apiError("Monthly limit reached. Upgrade plan.", 429);
     }
 
+    const historicalData = await getHistoricalData(phone, username);
+
     const [phoneResult, addressResult] = await Promise.all([
-      phone ? validatePhone(phone) : Promise.resolve(null),
-      address ? validateAddress(address) : Promise.resolve(null)
+      validatePhone(phone ?? ""),
+      validateAddress(address ?? "")
     ]);
 
     const aiResult = await analyzeWithGemini(messages, username);
@@ -99,16 +112,23 @@ export const POST = withAuth(async ({ req, user }) => {
       aiResult,
       phoneResult,
       addressResult,
-      historicalData: await getHistoricalData(phone, username)
+      historicalData
     });
+
+    const phoneDbPayload =
+      phoneResult?.configured === true && typeof phoneResult.phone_valid === "boolean"
+        ? buyerPhoneDb(phoneResult as PhoneResult & { phone_valid: boolean })
+        : {};
+
+    const addressDbPayload = addressResult?.configured === true ? buyerAddressDb(addressResult) : {};
 
     const buyer = await saveBuyer({
       seller_id: user.id,
       instagram_username: username,
       phone_number: phone,
       address_raw: address,
-      ...(phoneResult ? buyerPhoneDb(phoneResult) : {}),
-      ...(addressResult ? buyerAddressDb(addressResult) : {}),
+      ...phoneDbPayload,
+      ...addressDbPayload,
       ...buyerRowPayloadFromAi(aiResult),
       final_trust_score: finalScore,
       final_risk_level: riskLevel,
@@ -118,17 +138,28 @@ export const POST = withAuth(async ({ req, user }) => {
     await saveSignals(buyer.id, signals);
     await incrementUsage(user.id, user.email);
 
-    return apiSuccess(
+    const raw = aiResult.ai_raw_response as Record<string, unknown> | undefined;
+
+    return Response.json(
       {
         buyer_id: buyer.id,
         trust_score: finalScore,
         risk_level: riskLevel,
-        ai_reasons: aiResult.ai_reasons,
-        signals,
+        analyst_notes: (raw?.analyst_notes as string | undefined) ?? aiResult.analyst_notes ?? null,
+        ai_reasons: aiResult.ai_reasons ?? [],
+        positive_signals: aiResult.positive_signals ?? [],
+        negative_signals: aiResult.negative_signals ?? [],
+        recommendation: aiResult.recommendation ?? "caution",
+        buyer_seriousness: aiResult.ai_buyer_seriousness ?? null,
+        commitment_confirmed: Boolean(raw?.commitment_confirmed),
+        communication_quality: (raw?.communication_quality as string | null | undefined) ?? null,
         phone_analysis: phoneResult,
         address_analysis: addressResult,
+        historical_data: historicalData ?? [],
+        signals,
         dashboard_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/buyers/${buyer.id}`
-      }
+      },
+      { headers: corsHeaders }
     );
   } catch (err) {
     logServerError("POST /api/analyze", err);
