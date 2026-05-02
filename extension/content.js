@@ -342,6 +342,150 @@ function autoDetectPhone(messages) {
   return null;
 }
 
+const ADDRESS_KEYWORDS = [
+  "house",
+  "flat",
+  "floor",
+  "apartment",
+  "plot",
+  "street",
+  "road",
+  "avenue",
+  "lane",
+  "sector",
+  "block",
+  "phase",
+  "town",
+  "colony",
+  "society",
+  "near",
+  "opposite",
+  "behind",
+  "beside",
+  "mohallah",
+  "mohalla",
+  "gali",
+  "chowk",
+  "bazar",
+  "bazaar",
+  "market",
+  "DHA",
+  "Gulshan",
+  "Gulberg",
+  "Clifton",
+  "Defence",
+  "Bahria",
+  "Askari",
+  "Cantt"
+];
+
+const PK_CITIES = [
+  "Karachi",
+  "Lahore",
+  "Islamabad",
+  "Rawalpindi",
+  "Faisalabad",
+  "Multan",
+  "Peshawar",
+  "Quetta",
+  "Sialkot",
+  "Gujranwala",
+  "Hyderabad",
+  "Abbottabad",
+  "Bahawalpur",
+  "Sargodha",
+  "Sheikhupura",
+  "Jhang",
+  "Rahim Yar Khan",
+  "Larkana",
+  "Mardan",
+  "Kasur",
+  "Okara",
+  "Sahiwal",
+  "Wah",
+  "Taxila",
+  "Attock",
+  "Chakwal",
+  "Jhelum",
+  "Gujrat",
+  "Hafizabad",
+  "Mandi Bahauddin"
+];
+
+const COMMITMENT_PHRASES = [
+  "okay",
+  "ok",
+  "theek hai",
+  "theek",
+  "bhej do",
+  "send karo",
+  "confirm",
+  "yes",
+  "ha",
+  "haan",
+  "done",
+  "agreed",
+  "zaroor",
+  "bilkul"
+];
+
+/**
+ * Heuristic delivery-address detection from buyer messages.
+ * @param {Array<{ role: string; text: string }>} messages
+ * @returns {string|null}
+ */
+function autoDetectAddress(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) return null;
+
+  /** @type {Array<{ score: number; text: string }>} */
+  const scored = [];
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    if (!msg || (msg.role !== "buyer" && msg.role !== "unknown")) continue;
+
+    const text = typeof msg.text === "string" ? msg.text : "";
+    const trimmed = text.trim();
+    if (!trimmed) continue;
+
+    const low = trimmed.toLowerCase();
+    let score = 0;
+
+    for (let k = 0; k < ADDRESS_KEYWORDS.length; k++) {
+      const kw = ADDRESS_KEYWORDS[k];
+      if (low.includes(String(kw).toLowerCase())) score += 3;
+    }
+
+    for (let c = 0; c < PK_CITIES.length; c++) {
+      const city = PK_CITIES[c];
+      if (low.includes(String(city).toLowerCase())) score += 5;
+    }
+
+    if (trimmed.length > 30) score += 2;
+
+    if (i > 0) {
+      const prev = messages[i - 1];
+      const prevText = typeof prev?.text === "string" ? prev.text.toLowerCase() : "";
+      if (prevText) {
+        for (let p = 0; p < COMMITMENT_PHRASES.length; p++) {
+          if (prevText.includes(COMMITMENT_PHRASES[p].toLowerCase())) {
+            score += 4;
+            break;
+          }
+        }
+      }
+    }
+
+    scored.push({ score, text: trimmed });
+  }
+
+  const above = scored.filter((s) => s.score > 3);
+  if (!above.length) return null;
+
+  above.sort((a, b) => b.score - a.score);
+  return above[0].text;
+}
+
 const IG_USERNAME_RESERVED = new Set([
   "p",
   "reel",
