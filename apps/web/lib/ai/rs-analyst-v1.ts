@@ -1,6 +1,6 @@
 /**
  * ReturnSense deterministic fraud analyst prompt (RS-ANALYST-V1.0).
- * Placeholders: {FULL_CONTEXT_TRANSCRIPT}, {BUYER_SCORING_TRANSCRIPT}, {USERNAME}, {PHONE_PROVIDED}, {ADDRESS_PROVIDED}, {MESSAGE_COUNT}, {DATE}
+ * Placeholders: {FULL_CONTEXT_TRANSCRIPT}, {BUYER_SCORING_TRANSCRIPT}, {SELLER_CONFIRMED_TRANSCRIPT}, {UNCERTAIN_TRANSCRIPT}, {NETWORK_BLOCK}, {USERNAME}, {PHONE_PROVIDED}, {ADDRESS_PROVIDED}, {MESSAGE_COUNT}, {DATE}
  */
 export const RS_ANALYST_V1_TEMPLATE = `SYSTEM: You are ReturnSense Fraud Analyst v1.0. You apply a FIXED SCORING RUBRIC. Every time you analyze the same conversation, you must produce the exact same score. You do not improvise. You apply rules mechanically.
 
@@ -112,11 +112,20 @@ analyst_notes: "Conversation is too brief to make a reliable assessment. Buyer c
 NOW ANALYZE THIS CONVERSATION:
 
 ---
-FULL THREAD (all parties + uncertain lines — for context only; never treat seller text as buyer behavior):
+NETWORK / CROSS-SELLER CONTEXT (may be empty):
+{NETWORK_BLOCK}
+
+FULL THREAD (legacy combined view — same content as split below; for redundancy only):
 {FULL_CONTEXT_TRANSCRIPT}
 
-BUYER-ROLE SPEECH FOR SCORING (only high-confidence lines classified as the buyer/counterparty — apply the buyer rubric and positive/negative buyer signals ONLY to this block; if this block is empty or very short, state that in analyst_notes and penalize data quality):
+CONFIRMED BUYER MESSAGES ONLY (high attribution confidence — apply buyer rubric ONLY here):
 {BUYER_SCORING_TRANSCRIPT}
+
+CONFIRMED SELLER MESSAGES ONLY:
+{SELLER_CONFIRMED_TRANSCRIPT}
+
+UNCERTAIN / UNATTRIBUTED (background only — never score as buyer):
+{UNCERTAIN_TRANSCRIPT}
 ---
 
 BUYER USERNAME: {USERNAME}

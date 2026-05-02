@@ -9,6 +9,7 @@ import {
   SYSTEM_PROMPT
 } from "@/lib/ai/openrouter";
 import { analyzeTriModel, triEngineEnabled } from "@/lib/ai/tri/run";
+import { buildNetworkProfilePayload, formatNetworkProfileForPrompt, type NetworkIgRow } from "@/lib/network/network-layer";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
 
@@ -130,22 +131,41 @@ export async function analyzeWithGemini(
   messages: ChatMessage[],
   username: string,
   phoneProvided?: string | null,
-  addressProvided?: string | null
+  addressProvided?: string | null,
+  networkIg: NetworkIgRow | null = null,
+  distinctSellerCount: number | null = null
 ): Promise<AiStructuredResult> {
   if (triEngineEnabled()) {
     try {
-      return await analyzeTriModel(messages, username, phoneProvided, addressProvided);
+      return await analyzeTriModel(
+        messages,
+        username,
+        phoneProvided,
+        addressProvided,
+        networkIg,
+        distinctSellerCount
+      );
     } catch (triErr) {
       console.warn("[RS] Tri-model engine failed — falling back to single LLM path:", triErr);
     }
   }
 
   if (!process.env.GEMINI_API_KEY?.trim()) {
-    return analyzeWithOpenRouter(messages, username, phoneProvided, addressProvided);
+    return analyzeWithOpenRouter(
+      messages,
+      username,
+      phoneProvided,
+      addressProvided,
+      networkIg,
+      distinctSellerCount
+    );
   }
 
   const model = getGeminiModel();
-  const prompt = buildAnalysisPrompt(messages, username, phoneProvided, addressProvided);
+  const networkBlock = formatNetworkProfileForPrompt(
+    buildNetworkProfilePayload(networkIg, distinctSellerCount)
+  );
+  const prompt = buildAnalysisPrompt(messages, username, phoneProvided, addressProvided, networkBlock);
 
   try {
     let result: GenerateContentResult;
@@ -160,25 +180,53 @@ export async function analyzeWithGemini(
           "[RS] Gemini generateContent unavailable — using OpenRouter fallback:",
           collectErrorText(genErr).slice(0, 280)
         );
-        return await analyzeWithOpenRouter(messages, username, phoneProvided, addressProvided);
+        return await analyzeWithOpenRouter(
+          messages,
+          username,
+          phoneProvided,
+          addressProvided,
+          networkIg,
+          distinctSellerCount
+        );
       }
       throw genErr;
     }
 
     const rawText = getGeminiResponseText(result);
     if (!rawText?.trim()) {
-      return await analyzeWithOpenRouter(messages, username, phoneProvided, addressProvided);
+      return await analyzeWithOpenRouter(
+        messages,
+        username,
+        phoneProvided,
+        addressProvided,
+        networkIg,
+        distinctSellerCount
+      );
     }
 
     let parsed: Record<string, unknown>;
     try {
       parsed = parseAnalysisJson(rawText);
     } catch {
-      return await analyzeWithOpenRouter(messages, username, phoneProvided, addressProvided);
+      return await analyzeWithOpenRouter(
+        messages,
+        username,
+        phoneProvided,
+        addressProvided,
+        networkIg,
+        distinctSellerCount
+      );
     }
     return mapParsedToAiResult(parsed);
   } catch (err) {
     console.error("Gemini error:", err);
-    return await analyzeWithOpenRouter(messages, username, phoneProvided, addressProvided);
+    return await analyzeWithOpenRouter(
+      messages,
+      username,
+      phoneProvided,
+      addressProvided,
+      networkIg,
+      distinctSellerCount
+    );
   }
 }

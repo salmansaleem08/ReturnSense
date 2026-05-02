@@ -1,7 +1,11 @@
 import { RS_ANALYST_V1_TEMPLATE } from "@/lib/ai/rs-analyst-v1";
+import { buildNetworkProfilePayload, formatNetworkProfileForPrompt, type NetworkIgRow } from "@/lib/network/network-layer";
 import {
+  formatBuyerConfirmedTranscript,
   formatBuyerScoringTranscript,
   formatFullContextTranscript,
+  formatSellerConfirmedTranscript,
+  formatUncertainContextTranscript,
   type AnalyzedMessage
 } from "@/lib/analysis/attribution";
 
@@ -51,7 +55,8 @@ export function buildAnalysisPrompt(
   messages: ChatMessage[],
   username: string,
   phoneProvided?: string | null,
-  addressProvided?: string | null
+  addressProvided?: string | null,
+  networkBlock = ""
 ) {
   const analyzed: AnalyzedMessage[] = messages.map((m) => ({
     role: m.role,
@@ -61,16 +66,25 @@ export function buildAnalysisPrompt(
   }));
   const fullContextTranscript = formatFullContextTranscript(analyzed);
   const buyerScoringTranscript =
+    formatBuyerConfirmedTranscript(analyzed).trim() ||
     formatBuyerScoringTranscript(analyzed).trim() ||
-    "(none — no buyer lines met confidence threshold; use FULL THREAD only as weak context and penalize insufficient buyer attribution.)";
+    "(none — no high-confidence buyer lines; penalize insufficient buyer attribution.)";
+  const sellerConfirmed =
+    formatSellerConfirmedTranscript(analyzed).trim() || "(none — no high-confidence seller lines)";
+  const uncertainTranscript =
+    formatUncertainContextTranscript(analyzed).trim() || "(none)";
   const phoneLine = phoneProvided?.trim()?.length ? phoneProvided.trim() : "Not provided";
   const addressLine = addressProvided?.trim()?.length ? addressProvided.trim() : "Not provided";
   const messageCount = String(messages.length);
   /** Fixed so identical chats produce identical model output (daily date caused drift). */
   const dateStr = "N/A";
+  const net = networkBlock.trim() || "No cross-seller network summary provided for this request.";
 
   return RS_ANALYST_V1_TEMPLATE.replace("{FULL_CONTEXT_TRANSCRIPT}", fullContextTranscript)
     .replace("{BUYER_SCORING_TRANSCRIPT}", buyerScoringTranscript)
+    .replace("{SELLER_CONFIRMED_TRANSCRIPT}", sellerConfirmed)
+    .replace("{UNCERTAIN_TRANSCRIPT}", uncertainTranscript)
+    .replace("{NETWORK_BLOCK}", net)
     .replace("{USERNAME}", username)
     .replace("{PHONE_PROVIDED}", phoneLine)
     .replace("{ADDRESS_PROVIDED}", addressLine)
@@ -82,9 +96,14 @@ export async function analyzeWithOpenRouter(
   messages: ChatMessage[],
   username: string,
   phoneProvided?: string | null,
-  addressProvided?: string | null
+  addressProvided?: string | null,
+  networkIg: NetworkIgRow | null = null,
+  distinctSellerCount: number | null = null
 ): Promise<AiStructuredResult> {
-  const prompt = buildAnalysisPrompt(messages, username, phoneProvided, addressProvided);
+  const networkBlock = formatNetworkProfileForPrompt(
+    buildNetworkProfilePayload(networkIg, distinctSellerCount)
+  );
+  const prompt = buildAnalysisPrompt(messages, username, phoneProvided, addressProvided, networkBlock);
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
