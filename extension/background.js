@@ -25,16 +25,34 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return false;
     }
 
-    const authUrl = `${supabaseUrl}/auth/v1/token?grant_type=password`;
+    let authUrl;
+    try {
+      const u = new URL(`${supabaseUrl}/auth/v1/token?grant_type=password`);
+      if (u.protocol !== "https:") {
+        throw new Error("SUPABASE_URL must use https://");
+      }
+      authUrl = u.toString();
+    } catch (e) {
+      sendResponse({
+        ok: false,
+        error:
+          e instanceof Error
+            ? e.message
+            : "Invalid SUPABASE_URL (copy Project URL from Supabase → Settings → API)."
+      });
+      return false;
+    }
 
     (async () => {
       try {
+        // Password grant: only `apikey` + Content-Type (Supabase docs).
+        // Do NOT add Authorization here: publishable keys (sb_publishable_*) are not JWTs;
+        // Bearer + apikey mismatch breaks the API gateway and can surface as "Failed to fetch".
         const res = await fetch(authUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            apikey: anonKey,
-            Authorization: `Bearer ${anonKey}`
+            apikey: anonKey
           },
           body: JSON.stringify({ email, password })
         });
