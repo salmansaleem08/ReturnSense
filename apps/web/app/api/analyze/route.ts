@@ -95,6 +95,8 @@ export const POST = withAuth(async ({ req, user }) => {
       return apiError("Not enough chat data", 400);
     }
 
+    const messageCount = messages.length;
+
     const quota = await checkQuota(user.id, user.email);
     if (!quota.allowed) {
       return apiError("Monthly limit reached. Upgrade plan.", 429);
@@ -137,13 +139,14 @@ export const POST = withAuth(async ({ req, user }) => {
       addressStr ? validateAddress(addressStr) : Promise.resolve(addressNotProvided)
     ]);
 
-    const aiResult = await analyzeWithGemini(messages, username);
+    const aiResult = await analyzeWithGemini(messages, username, phoneStr || null, addressStr || null);
 
     const { finalScore, riskLevel, signals } = computeFinalScore({
       aiResult,
       phoneResult,
       addressResult,
-      historicalData
+      historicalData,
+      chatMessages: messages
     });
 
     const phoneDbPayload =
@@ -187,6 +190,14 @@ export const POST = withAuth(async ({ req, user }) => {
         buyer_seriousness: aiResult.ai_buyer_seriousness ?? null,
         commitment_confirmed: Boolean(raw?.commitment_confirmed),
         communication_quality: (raw?.communication_quality as string | null | undefined) ?? null,
+        message_count: messageCount,
+        conversation_summary:
+          typeof raw?.conversation_summary === "string" ? raw.conversation_summary : null,
+        hesitation_detected: Boolean(raw?.hesitation_detected),
+        asked_about_returns: Boolean(raw?.asked_about_returns),
+        shared_phone_proactively: Boolean(raw?.shared_phone_proactively),
+        shared_address_proactively: Boolean(raw?.shared_address_proactively),
+        excessive_bargaining: Boolean(raw?.excessive_bargaining),
         phone_analysis: phoneResult,
         address_analysis: addressResult,
         historical_data: historicalData ?? [],

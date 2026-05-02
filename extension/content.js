@@ -895,6 +895,40 @@ function displayResult(result) {
     (typeof result?.analyst_notes === "string" && result.analyst_notes) ||
     "No analyst notes provided.";
 
+  const convSummary =
+    typeof result?.conversation_summary === "string" && result.conversation_summary
+      ? result.conversation_summary
+      : "";
+  const summaryHtml = convSummary
+    ? `<div style="font-size:11px;color:#6B7280;text-align:center;padding:4px 10px 10px;border-top:1px solid #F3F4F6;margin-top:6px;">📝 ${escapeHtml(
+        convSummary
+      )}</div>`
+    : "";
+  const msgCount =
+    typeof result?.message_count === "number" && !Number.isNaN(result.message_count) ? result.message_count : 0;
+  const msgCountHtml = `<div style="font-size:10px;color:#D1D5DB;text-align:center;padding-bottom:8px;">Analyzed ${msgCount} message${
+    msgCount === 1 ? "" : "s"
+  } from conversation</div>`;
+
+  const quickFacts = [];
+  if (result?.commitment_confirmed === true) quickFacts.push("✅ Order confirmed");
+  if (result?.shared_phone_proactively === true) quickFacts.push("✅ Phone shared proactively");
+  if (result?.shared_address_proactively === true) quickFacts.push("✅ Address shared proactively");
+  if (result?.hesitation_detected === true) quickFacts.push("⚠️ Hesitation detected");
+  if (result?.asked_about_returns === true) quickFacts.push("🔴 Asked about returns");
+  if (result?.excessive_bargaining === true) quickFacts.push("🔴 Excessive bargaining");
+  const quickFactsHtml =
+    quickFacts.length > 0
+      ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #F3F4F6;">${quickFacts
+          .map(
+            (f) =>
+              `<span style="font-size:11px;font-weight:600;background:#F3F4F6;color:#374151;padding:3px 8px;border-radius:99px;">${escapeHtml(
+                f
+              )}</span>`
+          )
+          .join("")}</div>`
+      : "";
+
   const circumference = 2 * Math.PI * 46;
   const dashOffset = circumference * (1 - Math.min(100, Math.max(0, score)) / 100);
 
@@ -1046,6 +1080,8 @@ function displayResult(result) {
           </svg>
           <span class="rs-risk-badge" style="background:${riskColor};">${riskLabel}</span>
           <div class="rs-analyst-notes">${escapeHtml(analystNotes)}</div>
+          ${summaryHtml}
+          ${msgCountHtml}
         </div>
       </div>
     </div>
@@ -1063,6 +1099,7 @@ function displayResult(result) {
     <div class="rs-card">
       <div class="rs-card-header">🤖 AI Behavioral Analysis</div>
       <div class="rs-card-body">
+        ${quickFactsHtml}
         <div class="rs-signals-grid">
           <div>
             <div class="rs-signals-col-title" style="color:#16a34a;">✅ Positive</div>
