@@ -64,25 +64,26 @@ function resetCaptureIdleTimer() {
  * so we do not use the full-width row rect (that would sit on the thread midline).
  */
 /**
- * Incoming DM bubbles use `role="button"` on the interactive wrapper (long-press / reactions).
- * Outgoing (seller / extension user) bubbles typically do not — geometry alone often mislabels when
- * the thread column layout shifts everything to one side.
+ * Incoming bubbles: Instagram wraps the text bubble in `role="button"` (long-press / reactions).
+ * Scanning the whole row for any large button mislabels outgoing rows that include unrelated controls.
+ * Walk from the harvested bubble upward until the row and only treat an ancestor `role="button"` as incoming.
  */
-function igRowLooksLikeIncomingBuyer(rowOrEl) {
+function igBubbleHasIncomingRoleButton(el) {
   try {
     const row =
-      typeof rowOrEl.closest === "function" ? rowOrEl.closest('[role="row"]') : null;
-    const scope = row || rowOrEl;
-    const btns =
-      typeof scope.querySelectorAll === "function"
-        ? scope.querySelectorAll('[role="button"]')
-        : [];
-    for (let i = 0; i < btns.length; i++) {
-      const b = btns[i];
-      const r = b.getBoundingClientRect?.();
-      if (r && r.width >= 40 && r.height >= 18) {
-        return true;
+      typeof el.closest === "function" ? el.closest('[role="row"]') : null;
+    if (!row) return false;
+    const bubble = rsPickMessageBubbleElement(el);
+    if (!bubble) return false;
+    let n = bubble;
+    for (let i = 0; i < 22 && n; i++) {
+      if (!row.contains(n)) break;
+      if (typeof n.getAttribute === "function" && n.getAttribute("role") === "button") {
+        const r = n.getBoundingClientRect?.();
+        if (r && r.width >= 32 && r.height >= 14) return true;
       }
+      if (n === row) break;
+      n = n.parentElement;
     }
   } catch (_e) {
     /* ignore */
@@ -92,7 +93,7 @@ function igRowLooksLikeIncomingBuyer(rowOrEl) {
 
 /** Incoming bubbles: interactive wrapper `role="button"` — must run BEFORE span/DOM heuristics (IG uses spans on both sides). */
 function igLayerIncomingRoleButton(el) {
-  if (!igRowLooksLikeIncomingBuyer(el)) return null;
+  if (!igBubbleHasIncomingRoleButton(el)) return null;
   return { role: "buyer", layoutSource: "ig-incoming-role-button", confidence: 0.93 };
 }
 
@@ -255,10 +256,15 @@ function igLayerAvatarPrimary(el) {
   return null;
 }
 
-/** Structural: outgoing often wraps body copy in a substantive span; incoming may present as div-only paths. */
+/**
+ * Structural fallback (buyer-only): IG often uses div-heavy paths for received bubbles without the
+ * legacy `span.x1gslohp` marker. Do not infer seller from generic span dominance — both sides now use
+ * long text spans; that path caused universal mislabels. Seller-side span signal stays in layer 1 via
+ * `IG_SELLER_TEXT_SPAN_CLASS`.
+ */
 function igLayerStructuralPresentation(el) {
   try {
-    if (igRowLooksLikeIncomingBuyer(el)) return null;
+    if (igBubbleHasIncomingRoleButton(el)) return null;
     const bubbleEl = rsPickMessageBubbleElement(el);
     if (!bubbleEl) return null;
     const fullText = (bubbleEl.innerText || "").trim();
@@ -269,13 +275,8 @@ function igLayerStructuralPresentation(el) {
       const t = (spans[i].innerText || "").trim();
       if (t.length > maxSpanLen) maxSpanLen = t.length;
     }
-    const spanDominates =
-      maxSpanLen >= Math.max(12, fullText.length * 0.38) && maxSpanLen >= 10;
-    if (spanDominates) {
-      return { role: "seller", layoutSource: "ig-struct-span-text", confidence: 0.79 };
-    }
     if (maxSpanLen < 5 && bubbleEl.querySelector("div")) {
-      return { role: "buyer", layoutSource: "ig-struct-div-body", confidence: 0.76 };
+      return { role: "buyer", layoutSource: "ig-struct-div-body", confidence: 0.69 };
     }
   } catch (_e) {
     /* ignore */
@@ -315,6 +316,58 @@ function igLayer2SpacerSignal(el) {
     }
     if (spacerAfter && !spacerBefore) {
       return { role: "seller", layoutSource: "ig-layer2-spacer-cluster", confidence: 0.78 };
+    }
+  } catch (_e) {
+    /* ignore */
+  }
+  return null;
+}
+
+/**
+ * Row-local horizontal position: within each `[role="row"]`, incoming bubbles sit toward one edge
+ * and outgoing toward the other. This survives stale class names and beats viewport-wide geometry when
+ * the extension panel narrows the window but each row still lays out left vs right.
+ */
+function igLayerRowBubbleHorizontal(el, isRtl) {
+  try {
+    const row = typeof el.closest === "function" ? el.closest('[role="row"]') : null;
+    if (!row) return null;
+    const bubbleRect = rsPickMessageBubbleRect(el);
+    if (!bubbleRect || bubbleRect.width < 2) return null;
+    const rowRect = row.getBoundingClientRect();
+    if (rowRect.width < 100) return null;
+    const cx = bubbleRect.left + bubbleRect.width / 2;
+    const rel = (cx - rowRect.left) / rowRect.width;
+    if (!isRtl) {
+      if (rel <= 0.36) {
+        return {
+          role: "buyer",
+          layoutSource: "ig-row-bubble-left",
+          confidence: 0.87
+        };
+      }
+      if (rel >= 0.64) {
+        return {
+          role: "seller",
+          layoutSource: "ig-row-bubble-right",
+          confidence: 0.87
+        };
+      }
+    } else {
+      if (rel >= 0.64) {
+        return {
+          role: "buyer",
+          layoutSource: "ig-row-bubble-rtl-right",
+          confidence: 0.87
+        };
+      }
+      if (rel <= 0.36) {
+        return {
+          role: "seller",
+          layoutSource: "ig-row-bubble-rtl-left",
+          confidence: 0.87
+        };
+      }
     }
   } catch (_e) {
     /* ignore */
@@ -455,13 +508,23 @@ function harvestVisibleMessages() {
       /**
        * Instagram Web DM attribution order:
        * 1) Avatar / square slot in leading edge of row → buyer (incoming).
-       * 2) role="button" on bubble (incoming) — BEFORE span/DOM heuristics (IG uses spans on both sides).
+       * 2) role="button" on bubble ancestor chain (incoming) — before span heuristics.
        * 3) --x-width row spacers.
-       * 4) Optional obfuscated class fingerprints.
-       * 5) Structural span-vs-div (skipped when role=button would apply).
-       * 6) Chat column zones + midline split in gray band; flex vs column mid (not flex-end→seller only).
-       * 7) Viewport last resort.
+       * 4) Row-local bubble horizontal position (left/right within `[role="row"]`).
+       * 5) Optional obfuscated class fingerprints.
+       * 6) Structural buyer-only hint (div-heavy paths).
+       * 7) Chat column zones + midline split; flex vs column mid.
+       * 8) Viewport last resort.
        */
+      let direction = "ltr";
+      try {
+        direction = String(getComputedStyle(main).direction || "ltr").toLowerCase();
+      } catch (_e) {
+        /* keep ltr */
+      }
+
+      const isRtl = direction === "rtl";
+
       let flexEndDepth = -1;
       let flexStartDepth = -1;
       let ancestor = el;
@@ -491,6 +554,7 @@ function harvestVisibleMessages() {
         igLayerAvatarPrimary(el) ||
         igLayerIncomingRoleButton(el) ||
         igLayer2SpacerSignal(el) ||
+        igLayerRowBubbleHorizontal(el, isRtl) ||
         igLayer1ClassFingerprint(el) ||
         igLayerStructuralPresentation(el);
 
@@ -504,15 +568,6 @@ function harvestVisibleMessages() {
         layoutSource = early.layoutSource;
         presetConfidence = early.confidence;
       }
-
-      let direction = "ltr";
-      try {
-        direction = String(getComputedStyle(main).direction || "ltr").toLowerCase();
-      } catch (_e) {
-        /* keep ltr */
-      }
-
-      const isRtl = direction === "rtl";
       const colRect = chatColumnRect.width > 40 ? chatColumnRect : mainRectForFilter;
       if (role === "unknown" && bubbleRect && colRect.width > 80) {
         const cx = bubbleRect.left + bubbleRect.width / 2;
