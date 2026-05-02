@@ -668,6 +668,44 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
+/**
+ * Record order outcome from extension panel (same API as dashboard).
+ * @param {string} buyerId
+ * @param {string} outcome
+ */
+async function submitOutcomeFromPanel(buyerId, outcome) {
+  const msgEl = document.getElementById("rs-outcome-msg");
+  const authData = await getTokenFromBackground();
+  const token = authData?.token;
+  if (!token) {
+    if (msgEl) msgEl.textContent = "Sign in required to save outcome.";
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/api/outcomes`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ buyer_id: buyerId, outcome })
+    });
+    let payload = {};
+    try {
+      payload = await res.json();
+    } catch (_e) {
+      payload = {};
+    }
+    if (!res.ok) throw new Error(payload.error || "Request failed");
+    if (msgEl) msgEl.textContent = "Saved. Thank you.";
+    document.querySelectorAll(".rs-outcome-btn").forEach((b) => {
+      b.setAttribute("disabled", "true");
+    });
+  } catch (e) {
+    if (msgEl) msgEl.textContent = e instanceof Error ? e.message : "Could not save";
+  }
+}
+
 function applyInstagramMainMargin() {
   removeInstagramMainMargin();
   const main = document.querySelector('[role="main"]');
@@ -1098,8 +1136,7 @@ function displayResult(result) {
   const hist = Array.isArray(result?.historical_data) ? result.historical_data : [];
   let histHtml = "";
   if (!hist.length) {
-    histHtml = `<p style="font-size:13px;color:#262626;margin:0;">No prior records found for this buyer in the ReturnSense network.</p>
-      <p class="rs-status-valid" style="font-size:13px;margin:8px 0 0;">No negative signals in prior history.</p>`;
+    histHtml = `<p style="font-size:13px;color:#6B7280;margin:0;">No prior marked outcomes found for this buyer in your account history.</p>`;
   } else {
     const rows = hist
       .map((row) => {
@@ -1124,6 +1161,24 @@ function displayResult(result) {
   }
 
   const buyerIdDisp = escapeHtml(String(result?.buyer_id ?? "—"));
+  const bidForOutcome = result?.buyer_id;
+  const outcomeCard =
+    bidForOutcome != null && String(bidForOutcome).length > 0
+      ? `<div class="rs-card">
+      <div class="rs-card-header">Order outcome</div>
+      <div class="rs-card-body">
+        <p style="font-size:12px;color:#6B7280;margin:0 0 10px;line-height:1.4;">What happened with this order? (Improves future scoring; cross-seller data uses hashed handles only.)</p>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          <button type="button" class="rs-outcome-btn" data-outcome="delivered">Delivered</button>
+          <button type="button" class="rs-outcome-btn" data-outcome="returned">Returned</button>
+          <button type="button" class="rs-outcome-btn" data-outcome="fake">Fake order</button>
+          <button type="button" class="rs-outcome-btn" data-outcome="cancelled">Cancelled</button>
+        </div>
+        <p id="rs-outcome-msg" style="font-size:12px;margin-top:10px;color:#374151;min-height:1.2em;"></p>
+      </div>
+    </div>`
+      : "";
+  const privacyFooter = `<div style="font-size:10px;color:#9CA3AF;text-align:center;padding:10px 4px 2px;line-height:1.45;border-top:1px solid #EFEFEF;margin-top:10px;">Conversation text is not stored. Only derived risk signals. Scores are advisory—you decide whether to ship. <a href="${API_BASE}/privacy" target="_blank" rel="noopener noreferrer" style="color:#6B7280;">Privacy policy</a></div>`;
 
   body.innerHTML = `
     <div class="rs-card">
@@ -1177,11 +1232,14 @@ function displayResult(result) {
       <div class="rs-card-body">${histHtml}</div>
     </div>
 
+    ${outcomeCard}
+
     <div class="rs-card">
       <div class="rs-card-body">
         <button type="button" class="rs-action-btn rs-btn-primary" id="rs-view-report">View full report</button>
         <button type="button" class="rs-action-btn rs-btn-secondary" id="rs-new-analysis">New analysis</button>
-        <div style="text-align:center;color:#8E8E8E;font-size:11px;margin-top:4px;">Analysis ID: ${buyerIdDisp} | Powered by ReturnSense</div>
+        <div style="text-align:center;color:#8E8E8E;font-size:11px;margin-top:4px;">Analysis ID: ${buyerIdDisp} · ReturnSense</div>
+        ${privacyFooter}
       </div>
     </div>`;
 
@@ -1209,6 +1267,13 @@ function displayResult(result) {
       );
     });
   }
+
+  document.querySelectorAll(".rs-outcome-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const o = btn.getAttribute("data-outcome");
+      if (o && bidForOutcome != null) void submitOutcomeFromPanel(String(bidForOutcome), o);
+    });
+  });
 }
 
 function removeFloatingAnalyzeButton() {

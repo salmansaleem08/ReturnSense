@@ -41,7 +41,11 @@ export default function AnalyticsPage() {
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
     async function load() {
-      const { data } = await supabase.from("buyers").select("*").order("created_at", { ascending: false });
+      const { data } = await supabase
+        .from("buyers")
+        .select("*")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
       setBuyers(data || []);
       setLoading(false);
     }

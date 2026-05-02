@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { notFound } from "next/navigation";
 
 import { AddressCard } from "@/components/buyers/address-card";
+import { DeleteAnalysisButton } from "@/components/buyers/delete-analysis-button";
 import { OutcomeMarker } from "@/components/buyers/outcome-marker";
 import { PhoneCard } from "@/components/buyers/phone-card";
 import { ShareLinkButton } from "@/components/buyers/share-link-button";
@@ -33,6 +34,7 @@ export default async function BuyerDetailPage({ params }: { params: { id: string
     .select("*,risk_signals(*)")
     .eq("id", params.id)
     .eq("seller_id", user.id)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (!buyer) notFound();
@@ -114,12 +116,17 @@ export default async function BuyerDetailPage({ params }: { params: { id: string
           </div>
         </details>
 
-        <details className="rounded-[var(--radius-md)] border border-border bg-card p-5">
-          <summary className="cursor-pointer text-sm font-semibold text-foreground">Chat transcript</summary>
-          <pre className="mt-3 max-h-[420px] overflow-auto whitespace-pre-wrap rounded-[var(--radius-sm)] bg-muted/50 p-4 text-sm leading-relaxed text-foreground">
-            {buyer.chat_snapshot || "No chat snapshot available."}
-          </pre>
-        </details>
+        <div className="rounded-[var(--radius-md)] border border-border bg-muted/30 p-5 text-sm leading-relaxed text-muted-foreground">
+          <p className="font-semibold text-foreground">Conversation text</p>
+          <p className="mt-2">
+            Raw Instagram messages are not stored in ReturnSense. Only derived signals and scores from the analysis you ran are kept,
+            in line with our{" "}
+            <a className="text-foreground underline" href="/privacy" target="_blank" rel="noreferrer">
+              privacy policy
+            </a>
+            .
+          </p>
+        </div>
       </section>
 
       <aside className="space-y-4 lg:col-span-2">
@@ -144,6 +151,15 @@ export default async function BuyerDetailPage({ params }: { params: { id: string
         </div>
 
         <OutcomeMarker buyerId={buyer.id} currentOutcome={buyer.outcome} outcomeMarkedAt={buyer.outcome_marked_at} />
+
+        <div className="rounded-[var(--radius-md)] border border-border bg-card p-5">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Remove from workspace</h3>
+          <p className="mb-3 text-sm text-muted-foreground">
+            Deletes this analysis from your dashboard and personal analytics. Outcomes you already reported stay in the anonymous network
+            layer to help other sellers.
+          </p>
+          <DeleteAnalysisButton buyerId={buyer.id} />
+        </div>
 
         <div className="rounded-[var(--radius-md)] border border-border bg-card p-5">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">AI reasons</h3>

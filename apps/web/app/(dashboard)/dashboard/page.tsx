@@ -61,6 +61,7 @@ export default function DashboardPage() {
         supabase
           .from("buyers")
           .select("id,instagram_username,final_trust_score,final_risk_level,outcome,created_at")
+          .is("deleted_at", null)
           .order("created_at", { ascending: false })
           .limit(8)
       ]);

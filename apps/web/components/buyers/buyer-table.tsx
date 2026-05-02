@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DeleteAnalysisButton } from "@/components/buyers/delete-analysis-button";
 import { TrustScoreBadge } from "@/components/buyers/trust-score-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -61,6 +62,7 @@ export function BuyerTable({
               <TableHead>Address</TableHead>
               <TableHead>Date</TableHead>
               <TableHead>Outcome</TableHead>
+              <TableHead className="w-[120px] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -93,11 +95,14 @@ export function BuyerTable({
                   <TableCell>
                     <Badge className={`${outcomeClass(item.outcome)} capitalize`}>{item.outcome}</Badge>
                   </TableCell>
+                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                    <DeleteAnalysisButton buyerId={item.id} compact stopPropagation />
+                  </TableCell>
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-slate-500">
+                <TableCell colSpan={8} className="py-10 text-center text-slate-500">
                   No buyers analyzed yet. Use the Chrome Extension on Instagram.
                 </TableCell>
               </TableRow>
