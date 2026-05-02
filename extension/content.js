@@ -829,10 +829,18 @@ function showExtractionLoadingPanel() {
  * @param {Array<{ role: string; text: string }>} messages
  */
 function openAnalysisPanel(username, messages) {
+  let safeUsername = (username || "unknown_buyer").replace(/^\(\d+\)\s*/, "").trim();
+  const forbidden = ["instagram", "direct", "inbox", "chats", "messages", "home", "explore"];
+  if (!safeUsername || forbidden.includes(safeUsername.toLowerCase()) || safeUsername.length > 50) {
+    safeUsername = "unknown_buyer";
+  }
+  lastUsername = safeUsername;
+  lastMessages = Array.isArray(messages) ? messages.slice() : [];
+
   const detectedPhone = autoDetectPhone(messages);
   const detectedAddress = autoDetectAddress(messages);
 
-  const safeUser = escapeHtml(username || "unknown_buyer");
+  const safeUser = escapeHtml(safeUsername);
   const msgCount = Array.isArray(messages) ? messages.length : 0;
   const scrollWarn =
     msgCount < 3
@@ -888,7 +896,7 @@ function openAnalysisPanel(username, messages) {
         addrEl && typeof addrEl.value === "string" ? addrEl.value.trim() : "";
       submitForAnalysis({
         messages,
-        username: username || "unknown_buyer",
+        username: safeUsername,
         phone: phoneValue || null,
         address: addressValue || null
       });
