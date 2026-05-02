@@ -56,7 +56,7 @@ export const POST = withAuth(async ({ req, user }) => {
       return apiError("Not enough chat data", 400);
     }
 
-    const quota = await checkQuota(user.id);
+    const quota = await checkQuota(user.id, user.email);
     if (!quota.allowed) {
       return apiError("Monthly limit reached. Upgrade plan.", 429);
     }
@@ -89,7 +89,7 @@ export const POST = withAuth(async ({ req, user }) => {
     });
 
     await saveSignals(buyer.id, signals);
-    await incrementUsage(user.id);
+    await incrementUsage(user.id, user.email);
 
     return apiSuccess(
       {

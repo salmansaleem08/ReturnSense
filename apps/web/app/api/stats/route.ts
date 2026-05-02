@@ -19,7 +19,7 @@ export const GET = withAuth(async ({ user }) => {
           .eq("seller_id", user.id)
           .in("final_risk_level", ["high", "critical"]),
         supabaseAdmin.from("buyers").select("*", { count: "exact", head: true }).eq("seller_id", user.id).eq("outcome", "pending"),
-        checkQuota(user.id)
+        checkQuota(user.id, user.email)
       ]);
 
     const safeRows = scoreRows ?? [];
