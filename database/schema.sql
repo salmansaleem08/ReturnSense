@@ -47,8 +47,11 @@ create table if not exists public.buyers (
   outcome_marked_at timestamptz,
   outcome_notes text,
   created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  updated_at timestamptz default now(),
+  conversation_hash text
 );
+
+create index if not exists idx_buyers_conversation_hash on public.buyers (seller_id, conversation_hash);
 
 -- risk_signals
 -- Transparent per-signal scoring entries attached to a buyer analysis.

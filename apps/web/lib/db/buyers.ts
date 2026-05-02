@@ -14,6 +14,26 @@ export async function saveBuyer(data: BuyerInsert) {
   return buyer;
 }
 
+export async function findBuyerByConversationHash(sellerId: string, conversationHash: string) {
+  const { data, error } = await supabaseAdmin
+    .from("buyers")
+    .select("*")
+    .eq("seller_id", sellerId)
+    .eq("conversation_hash", conversationHash)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function listRiskSignalsForBuyer(buyerId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("risk_signals")
+    .select("signal_type, signal_name, impact, description")
+    .eq("buyer_id", buyerId);
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
 export async function saveSignals(buyerId: string, signals: SignalInsert[]) {
   if (!signals.length) return [];
   const payload = signals.map((signal) => ({ buyer_id: buyerId, ...signal }));

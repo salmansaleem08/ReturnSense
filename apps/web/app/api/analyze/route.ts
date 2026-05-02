@@ -1,8 +1,16 @@
+import { createHash } from "crypto";
+
 import { analyzeWithGemini } from "@/lib/ai/gemini";
 import { buyerRowPayloadFromAi } from "@/lib/ai/openrouter";
 import { logServerError } from "@/lib/api/log-server-error";
 import { apiError, corsHeaders, withAuth } from "@/lib/api/response";
-import { getHistoricalData, saveBuyer, saveSignals } from "@/lib/db/buyers";
+import {
+  findBuyerByConversationHash,
+  getHistoricalData,
+  listRiskSignalsForBuyer,
+  saveBuyer,
+  saveSignals
+} from "@/lib/db/buyers";
 import { checkQuota, incrementUsage } from "@/lib/db/profiles";
 import { computeFinalScore } from "@/lib/risk/score-engine";
 import type { AddressResult } from "@/lib/validation/address";
@@ -34,6 +42,44 @@ function buyerAddressDb(a: AddressResult) {
 
 function formatChatForStorage(messages: Array<{ role: string; text: string }>) {
   return messages.map((m) => `[${m.role.toUpperCase()}] ${m.text}`).join("\n").slice(0, 12000);
+}
+
+function phoneFromBuyerRow(buyer: Record<string, unknown>): PhoneResult {
+  const num = buyer.phone_number != null ? String(buyer.phone_number) : "";
+  return {
+    phone_valid: typeof buyer.phone_valid === "boolean" ? buyer.phone_valid : null,
+    phone_carrier: (buyer.phone_carrier as string) ?? null,
+    phone_is_voip: typeof buyer.phone_is_voip === "boolean" ? buyer.phone_is_voip : null,
+    phone_type: null,
+    phone_country: (buyer.phone_country as string) ?? null,
+    phone_international_format: null,
+    phone_local_format: null,
+    phone_number: num || null,
+    configured: true,
+    not_provided: !num.length,
+    error: null
+  };
+}
+
+function addressFromBuyerRow(buyer: Record<string, unknown>): AddressResult {
+  const rawAddr = buyer.address_raw != null ? String(buyer.address_raw) : "";
+  const hasGeo = buyer.address_lat != null && buyer.address_lng != null;
+  return {
+    address_found: hasGeo,
+    address_formatted: (buyer.address_formatted as string) ?? null,
+    address_lat: buyer.address_lat != null ? Number(buyer.address_lat) : null,
+    address_lng: buyer.address_lng != null ? Number(buyer.address_lng) : null,
+    address_city: (buyer.address_city as string) ?? null,
+    address_province: (buyer.address_province as string) ?? null,
+    address_country: (buyer.address_country as string) ?? null,
+    address_postal_code: null,
+    address_quality_score: typeof buyer.address_quality_score === "number" ? buyer.address_quality_score : 0,
+    address_precision: null,
+    address_types: [],
+    configured: true,
+    not_provided: !rawAddr.trim().length,
+    error: undefined
+  };
 }
 
 /** Instagram fallback often sends one transcript blob; Gemini still needs a turn structure. */
@@ -105,6 +151,69 @@ export const POST = withAuth(async ({ req, user }) => {
 
     const messageCount = messages.length;
 
+    const conversationHash = createHash("sha256")
+      .update(
+        JSON.stringify({
+          messages: messages.map((m) => ({ role: m.role, text: m.text })),
+          username,
+          phone: phoneStr,
+          address: addressStr
+        })
+      )
+      .digest("hex");
+
+    const cachedBuyer = await findBuyerByConversationHash(user.id, conversationHash);
+    if (cachedBuyer) {
+      console.log("[RS] Cache hit — returning existing analysis for hash", conversationHash.slice(0, 8));
+      const historicalData = await getHistoricalData(phoneStr || null, username);
+      const rawCached = (cachedBuyer.ai_raw_response as Record<string, unknown>) ?? {};
+      const msgCount =
+        typeof rawCached.message_count === "number" ? rawCached.message_count : messageCount;
+      const riskRows = await listRiskSignalsForBuyer(String(cachedBuyer.id));
+      const signals = riskRows.map((r) => ({
+        signal_type: r.signal_type as "chat" | "address" | "phone" | "history",
+        signal_name: String(r.signal_name),
+        impact: Number(r.impact),
+        description: r.description != null ? String(r.description) : ""
+      }));
+      const aiReasons = Array.isArray(cachedBuyer.ai_reasons)
+        ? (cachedBuyer.ai_reasons as string[])
+        : Array.isArray(rawCached.ai_reasons)
+          ? (rawCached.ai_reasons as string[])
+          : [];
+
+      return Response.json(
+        {
+          buyer_id: cachedBuyer.id,
+          trust_score: cachedBuyer.final_trust_score,
+          risk_level: cachedBuyer.final_risk_level,
+          analyst_notes: (rawCached.analyst_notes as string) ?? null,
+          ai_reasons: aiReasons,
+          positive_signals: Array.isArray(rawCached.positive_signals) ? rawCached.positive_signals : [],
+          negative_signals: Array.isArray(rawCached.negative_signals) ? rawCached.negative_signals : [],
+          recommendation: (rawCached.recommendation as string) ?? "caution",
+          buyer_seriousness: (cachedBuyer.ai_buyer_seriousness as string) ?? null,
+          commitment_confirmed: Boolean(rawCached.commitment_confirmed),
+          communication_quality: (rawCached.communication_quality as string) ?? null,
+          message_count: msgCount,
+          conversation_summary:
+            typeof rawCached.conversation_summary === "string" ? rawCached.conversation_summary : null,
+          hesitation_detected: Boolean(rawCached.hesitation_detected),
+          asked_about_returns: Boolean(rawCached.asked_about_returns),
+          shared_phone_proactively: Boolean(rawCached.shared_phone_proactively),
+          shared_address_proactively: Boolean(rawCached.shared_address_proactively),
+          excessive_bargaining: Boolean(rawCached.excessive_bargaining),
+          phone_analysis: phoneFromBuyerRow(cachedBuyer as Record<string, unknown>),
+          address_analysis: addressFromBuyerRow(cachedBuyer as Record<string, unknown>),
+          historical_data: historicalData ?? [],
+          signals,
+          cached: true,
+          dashboard_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/buyers/${cachedBuyer.id}`
+        },
+        { headers: corsHeaders }
+      );
+    }
+
     const quota = await checkQuota(user.id, user.email);
     if (!quota.allowed) {
       return apiError("Monthly limit reached. Upgrade plan.", 429);
@@ -167,6 +276,12 @@ export const POST = withAuth(async ({ req, user }) => {
         ? buyerAddressDb(addressResult)
         : {};
 
+    const aiPayload = buyerRowPayloadFromAi(aiResult);
+    const mergedRaw = {
+      ...(aiPayload.ai_raw_response as Record<string, unknown>),
+      message_count: messageCount
+    };
+
     const buyer = await saveBuyer({
       seller_id: user.id,
       instagram_username: username,
@@ -174,10 +289,12 @@ export const POST = withAuth(async ({ req, user }) => {
       address_raw: addressStr || null,
       ...phoneDbPayload,
       ...addressDbPayload,
-      ...buyerRowPayloadFromAi(aiResult),
+      ...aiPayload,
+      ai_raw_response: mergedRaw,
       final_trust_score: finalScore,
       final_risk_level: riskLevel,
-      chat_snapshot: formatChatForStorage(messages)
+      chat_snapshot: formatChatForStorage(messages),
+      conversation_hash: conversationHash
     });
 
     await saveSignals(buyer.id, signals);
@@ -210,6 +327,7 @@ export const POST = withAuth(async ({ req, user }) => {
         address_analysis: addressResult,
         historical_data: historicalData ?? [],
         signals,
+        cached: false,
         dashboard_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/buyers/${buyer.id}`
       },
       { headers: corsHeaders }
