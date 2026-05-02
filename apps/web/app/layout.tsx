@@ -1,13 +1,19 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { JetBrains_Mono, Manrope } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { validateEnv } from "@/lib/env";
 import { Toaster } from "@/components/ui/toaster";
 
-const inter = Inter({
+const manrope = Manrope({
   subsets: ["latin"],
-  variable: "--font-sans",
+  variable: "--font-manrope",
+  display: "swap"
+});
+
+const jetbrains = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains",
   display: "swap"
 });
 
@@ -22,8 +28,12 @@ export default function RootLayout({
   validateEnv();
 
   return (
-    <html lang="en" className={cn("font-sans", inter.variable)} suppressHydrationWarning>
-      <body className="font-sans">
+    <html
+      lang="en"
+      className={cn("font-sans", manrope.variable, jetbrains.variable)}
+      suppressHydrationWarning
+    >
+      <body className="font-sans antialiased">
         {children}
         <Toaster />
       </body>
