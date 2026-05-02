@@ -51,31 +51,41 @@ export const GET = withAuth(async ({ user }) => {
     const returned = safeRows.filter((row) => row.outcome === "returned").length;
     const returnRate = delivered + returned > 0 ? Math.round((returned / (delivered + returned)) * 100) : 0;
 
-    const since = new Date();
-    since.setDate(since.getDate() - 13);
-    since.setHours(0, 0, 0, 0);
-    const { data: dayRows } = await supabaseAdmin
+    const since7 = new Date();
+    since7.setDate(since7.getDate() - 6);
+    since7.setHours(0, 0, 0, 0);
+    const { data: trendRows } = await supabaseAdmin
       .from("buyers")
-      .select("created_at")
+      .select("created_at, final_trust_score, final_risk_level")
       .eq("seller_id", user.id)
       .is("deleted_at", null)
-      .gte("created_at", since.toISOString());
+      .gte("created_at", since7.toISOString());
 
-    const byDay: Record<string, number> = {};
-    for (let i = 13; i >= 0; i -= 1) {
+    const riskBucketsByDay: Record<string, { sum: number; n: number; high: number }> = {};
+    for (let i = 6; i >= 0; i -= 1) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       d.setHours(0, 0, 0, 0);
-      byDay[d.toISOString().slice(0, 10)] = 0;
+      riskBucketsByDay[d.toISOString().slice(0, 10)] = { sum: 0, n: 0, high: 0 };
     }
-    for (const row of dayRows ?? []) {
+    for (const row of trendRows ?? []) {
       const day = new Date(String(row.created_at)).toISOString().slice(0, 10);
-      if (day in byDay) byDay[day] += 1;
+      if (!(day in riskBucketsByDay)) continue;
+      const sc = row.final_trust_score;
+      const score = typeof sc === "number" ? sc : 0;
+      riskBucketsByDay[day].sum += score;
+      riskBucketsByDay[day].n += 1;
+      const rk = String(row.final_risk_level ?? "").toLowerCase();
+      if (rk === "high" || rk === "critical") {
+        riskBucketsByDay[day].high += 1;
+      }
     }
-    const analyses_by_day = Object.entries(byDay).map(([date, count]) => ({
-      day: date.slice(5),
-      fullDate: date,
-      count
+    const risk_trend_7d = Object.entries(riskBucketsByDay).map(([fullDate, v]) => ({
+      day: fullDate.slice(5),
+      fullDate,
+      avg_trust: v.n > 0 ? Math.round(v.sum / v.n) : null,
+      high_risk_count: v.high,
+      analyses_count: v.n
     }));
 
     const riskBuckets = { low: 0, medium: 0, high: 0, critical: 0 };
@@ -97,7 +107,7 @@ export const GET = withAuth(async ({ user }) => {
         delivered_count: delivered,
         returned_count: returned,
         risk_distribution: riskBuckets,
-        analyses_by_day
+        risk_trend_7d
       }
     );
   } catch (error) {

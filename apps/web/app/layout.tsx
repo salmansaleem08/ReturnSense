@@ -20,7 +20,10 @@ const jetbrains = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "ReturnSense",
-  description: "Scalable return intelligence platform"
+  description: "Scalable return intelligence platform",
+  icons: {
+    icon: "/brand-mark.svg"
+  }
 };
 
 export default function RootLayout({

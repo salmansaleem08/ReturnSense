@@ -9,6 +9,7 @@ OVERVIEW
 --------
 1. Extension collects DM messages (scroll-capture or visible), assigns role + attribution_confidence per line, POSTs to /api/analyze.
 2. API: auth → attribution sanity (422 if unreliable) → cache by conversation_hash → validators → tri or single-model AI → computeFinalScore (weights + network ceiling) → synthesis LLM → save buyer + signals → JSON.
+3. GET /api/stats: risk_trend_7d — last 7 calendar days, per day: avg_trust (null if no analyses), high_risk_count (high+critical), analyses_count.
 
 EXTENSION ATTRIBUTION (extension/content.js — harvestVisibleMessages)
 -----------------------------------------------------------------------

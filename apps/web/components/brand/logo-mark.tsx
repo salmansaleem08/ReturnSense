@@ -4,7 +4,7 @@ const DIM = { 24: 24, 28: 28, 32: 32, 40: 40, 48: 48 } as const;
 
 type Size = keyof typeof DIM;
 
-/** Same artwork as `public/brand-mark.svg` (extension: `icons/brand-mark.svg`). */
+/** E-commerce bag mark — same as `public/brand-mark.svg` and extension `icons/brand-mark.svg`. */
 export function LogoMark({ size = 32, className }: { size?: Size; className?: string }) {
   const px = DIM[size] ?? 32;
   return (

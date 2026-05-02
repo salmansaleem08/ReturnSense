@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Area,
-  AreaChart,
+  Bar,
   CartesianGrid,
+  ComposedChart,
+  Legend,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -38,7 +40,13 @@ type StatsPayload = {
   analyses_limit?: number;
   delivered_count?: number;
   returned_count?: number;
-  analyses_by_day?: Array<{ day: string; count: number }>;
+  risk_trend_7d?: Array<{
+    day: string;
+    fullDate: string;
+    avg_trust: number | null;
+    high_risk_count: number;
+    analyses_count: number;
+  }>;
 };
 
 export default function DashboardPage() {
@@ -75,7 +83,7 @@ export default function DashboardPage() {
     load();
   }, [supabase]);
 
-  const chartData = stats?.analyses_by_day ?? [];
+  const chartData = stats?.risk_trend_7d ?? [];
 
   return (
     <div className="space-y-6 text-foreground">
@@ -117,20 +125,16 @@ export default function DashboardPage() {
       </section>
 
       <section className="motion-safe:animate-[rs-fade-in_0.5s_ease-out] rounded-xl border border-border bg-card p-4">
-        <h2 className="mb-1 text-sm font-semibold text-foreground">Analysis activity</h2>
-        <p className="mb-3 text-xs text-muted-foreground">New buyer analyses per day (last 14 days)</p>
+        <h2 className="mb-1 text-sm font-semibold text-foreground">Risk trend</h2>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Last 7 days: daily average trust score (line) and count of high or critical risk analyses (bars).
+        </p>
         {loading ? (
           <Skeleton className="h-[200px] w-full rounded-[var(--radius-md)]" />
         ) : (
-          <div className="h-[220px] w-full">
+          <div className="h-[240px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="rsDashArea" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--rs-g3))" stopOpacity={0.45} />
-                    <stop offset="100%" stopColor="hsl(var(--rs-g3))" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
+              <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis
                   dataKey="day"
@@ -138,10 +142,21 @@ export default function DashboardPage() {
                   axisLine={{ stroke: "var(--border)" }}
                 />
                 <YAxis
-                  allowDecimals={false}
-                  width={32}
+                  yAxisId="trust"
+                  domain={[0, 100]}
+                  width={36}
                   tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
                   axisLine={{ stroke: "var(--border)" }}
+                  label={{ value: "Trust", angle: -90, position: "insideLeft", fill: "var(--muted-foreground)", fontSize: 10 }}
+                />
+                <YAxis
+                  yAxisId="riskn"
+                  orientation="right"
+                  allowDecimals={false}
+                  width={36}
+                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+                  axisLine={{ stroke: "var(--border)" }}
+                  label={{ value: "High/crit.", angle: 90, position: "insideRight", fill: "var(--muted-foreground)", fontSize: 10 }}
                 />
                 <Tooltip
                   contentStyle={{
@@ -150,15 +165,33 @@ export default function DashboardPage() {
                     fontSize: 12,
                     background: "var(--card)"
                   }}
+                  formatter={(value, name) => {
+                    if (name === "Avg trust" && (value === null || value === undefined)) {
+                      return ["No analyses that day", "Avg trust"];
+                    }
+                    return [value, name];
+                  }}
                 />
-                <Area
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar
+                  yAxisId="riskn"
+                  dataKey="high_risk_count"
+                  name="High / critical count"
+                  fill="var(--chart-1)"
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={28}
+                />
+                <Line
+                  yAxisId="trust"
                   type="monotone"
-                  dataKey="count"
-                  stroke="hsl(var(--rs-g2))"
+                  dataKey="avg_trust"
+                  name="Avg trust"
+                  stroke="var(--chart-2)"
                   strokeWidth={2}
-                  fill="url(#rsDashArea)"
+                  dot={{ r: 3, fill: "var(--chart-2)" }}
+                  connectNulls={false}
                 />
-              </AreaChart>
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         )}
