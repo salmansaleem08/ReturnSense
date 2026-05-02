@@ -8,6 +8,7 @@ import {
   type AiStructuredResult,
   SYSTEM_PROMPT
 } from "@/lib/ai/openrouter";
+import { analyzeTriModel, triEngineEnabled } from "@/lib/ai/tri/run";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
 
@@ -131,6 +132,14 @@ export async function analyzeWithGemini(
   phoneProvided?: string | null,
   addressProvided?: string | null
 ): Promise<AiStructuredResult> {
+  if (triEngineEnabled()) {
+    try {
+      return await analyzeTriModel(messages, username, phoneProvided, addressProvided);
+    } catch (triErr) {
+      console.warn("[RS] Tri-model engine failed — falling back to single LLM path:", triErr);
+    }
+  }
+
   if (!process.env.GEMINI_API_KEY?.trim()) {
     return analyzeWithOpenRouter(messages, username, phoneProvided, addressProvided);
   }
