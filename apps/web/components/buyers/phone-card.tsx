@@ -19,7 +19,8 @@ export function PhoneCard({ data }: { data: PhoneData }) {
     statusLabel = "Not provided";
     statusClass = "text-muted-foreground";
   } else if (!validated) {
-    statusLabel = "Not verified — add ABSTRACT_API_KEY on the server; check Vercel logs for [RS-PHONE].";
+    statusLabel =
+      "No verification on file — run Analyze again from the extension (refreshes Abstract). If it persists, confirm ABSTRACT_API_KEY on Render and check logs [RS-PHONE].";
     statusClass = "text-amber-600 dark:text-amber-500";
   } else if (data.phone_valid === true) {
     statusLabel = "Valid";
