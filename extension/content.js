@@ -1067,6 +1067,8 @@ function displayResult(result) {
     addressBlock = `<p style="color:#6B7280;font-size:13px;">No address data returned from server.</p>`;
   } else if (address.configured === false) {
     addressBlock = `<p style="color:#6B7280;font-size:13px;">Address geocoding is not configured. Add your GOOGLE_MAPS_API_KEY to the server environment to enable map verification.</p>`;
+  } else if (address.not_provided === true) {
+    addressBlock = `<p style="color:#9CA3AF;font-size:13px;margin:0;">No address was submitted with this analysis. Pre-fill the address field before running analysis to enable map verification.</p>`;
   } else if (!address.address_found) {
     addressBlock = `<p style="color:#6B7280;font-size:13px;">Address could not be located on map. Try resubmitting with a more specific address including street number and city name.</p>`;
   } else {
