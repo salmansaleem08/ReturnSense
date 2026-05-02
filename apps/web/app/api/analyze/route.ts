@@ -1,7 +1,9 @@
 import { createHash } from "crypto";
 
 import { analyzeWithGemini } from "@/lib/ai/gemini";
+import type { AiStructuredResult } from "@/lib/ai/openrouter";
 import { buyerRowPayloadFromAi } from "@/lib/ai/openrouter";
+import { synthesizeAnalystNarrative } from "@/lib/ai/tri/synthesize";
 import { logServerError } from "@/lib/api/log-server-error";
 import { getPublicAppUrl } from "@/lib/config/public-app-url";
 import { apiError, corsHeaders, withAuth } from "@/lib/api/response";
@@ -18,8 +20,13 @@ import type { AddressResult } from "@/lib/validation/address";
 import { validateAddress } from "@/lib/validation/address";
 import type { PhoneResult, PhoneValidationResult } from "@/lib/validation/phone";
 import { validatePhone } from "@/lib/validation/phone";
-import { logAttributionSummary, summarizeAttribution, type AnalyzedMessage } from "@/lib/analysis/attribution";
-import { getNetworkIgStats } from "@/lib/network/network-layer";
+import {
+  checkAttributionSanity,
+  logAttributionSummary,
+  summarizeAttribution,
+  type AnalyzedMessage
+} from "@/lib/analysis/attribution";
+import { buildNetworkProfilePayload, getDistinctSellerCountForIg, getNetworkIgStats } from "@/lib/network/network-layer";
 import { getSignalWeightMap } from "@/lib/network/signal-learning";
 
 /** Only columns that exist on `public.buyers` — PostgREST rejects unknown keys. */
@@ -212,6 +219,13 @@ export const POST = withAuth(async ({ req, user }) => {
     }
 
     const analyzedForLog = toAnalyzedMessages(messages);
+    const sanity = checkAttributionSanity(analyzedForLog);
+    if (!sanity.ok) {
+      return Response.json(
+        { error: sanity.message, code: sanity.code, attribution: sanity.detail },
+        { status: 422, headers: corsHeaders }
+      );
+    }
     logAttributionSummary("RS-ATTRIB", analyzedForLog);
     const attribCounts = summarizeAttribution(analyzedForLog);
 
@@ -234,7 +248,12 @@ export const POST = withAuth(async ({ req, user }) => {
     const cachedBuyer = await findBuyerByConversationHash(user.id, conversationHash);
     if (cachedBuyer) {
       console.log("[RS] Cache hit — returning existing analysis for hash", conversationHash.slice(0, 8));
-      const historicalData = await getHistoricalData(phoneStr || null, username);
+      const [historicalData, networkIgCached, distinctCached] = await Promise.all([
+        getHistoricalData(phoneStr || null, username),
+        getNetworkIgStats(username),
+        getDistinctSellerCountForIg(username)
+      ]);
+      const networkProfileCached = buildNetworkProfilePayload(networkIgCached, distinctCached);
       const rawCached = (cachedBuyer.ai_raw_response as Record<string, unknown>) ?? {};
       const msgCount =
         typeof rawCached.message_count === "number" ? rawCached.message_count : messageCount;
@@ -249,6 +268,11 @@ export const POST = withAuth(async ({ req, user }) => {
         ? (cachedBuyer.ai_reasons as string[])
         : Array.isArray(rawCached.ai_reasons)
           ? (rawCached.ai_reasons as string[])
+          : [];
+      const conflictsCached = Array.isArray(rawCached.signal_conflicts_resolved)
+        ? rawCached.signal_conflicts_resolved
+        : Array.isArray(rawCached.conflict_resolutions)
+          ? rawCached.conflict_resolutions
           : [];
 
       return Response.json(
@@ -276,6 +300,8 @@ export const POST = withAuth(async ({ req, user }) => {
           address_analysis: addressFromBuyerRow(cachedBuyer as Record<string, unknown>),
           historical_data: historicalData ?? [],
           signals,
+          network_profile: networkProfileCached,
+          signal_conflicts_resolved: conflictsCached,
           cached: true,
           dashboard_url: `${appBase}/dashboard/buyers/${cachedBuyer.id}`,
           disclaimer:
@@ -290,11 +316,13 @@ export const POST = withAuth(async ({ req, user }) => {
       return apiError("Monthly limit reached. Upgrade plan.", 429);
     }
 
-    const [historicalData, networkIg, signalWeightMap] = await Promise.all([
+    const [historicalData, networkIg, signalWeightMap, distinctSellerCount] = await Promise.all([
       getHistoricalData(phoneStr || null, username),
       getNetworkIgStats(username),
-      getSignalWeightMap()
+      getSignalWeightMap(),
+      getDistinctSellerCountForIg(username)
     ]);
+    const networkProfile = buildNetworkProfilePayload(networkIg, distinctSellerCount);
 
     const phoneNotProvided: PhoneValidationResult = {
       phone_valid: null,
@@ -341,7 +369,14 @@ export const POST = withAuth(async ({ req, user }) => {
       error: phoneResult.error ?? null
     });
 
-    const aiResult = await analyzeWithGemini(messages, username, phoneStr || null, addressStr || null);
+    const aiResult = await analyzeWithGemini(
+      messages,
+      username,
+      phoneStr || null,
+      addressStr || null,
+      networkIg,
+      distinctSellerCount
+    );
 
     const { finalScore, riskLevel, signals } = computeFinalScore({
       aiResult,
@@ -350,9 +385,58 @@ export const POST = withAuth(async ({ req, user }) => {
       historicalData,
       chatMessages: messages,
       buyerScoringCount: attribCounts.buyer_for_scoring,
-      networkIgFakeCount: networkIg?.fake_count ?? 0,
+      networkIgRow: networkIg,
       signalWeightMap
     });
+
+    const triRaw = (aiResult.ai_raw_response ?? {}) as Record<string, unknown>;
+    const conflicts = Array.isArray(triRaw.conflict_resolutions) ? triRaw.conflict_resolutions : [];
+
+    const phoneDigest =
+      phoneResult.configured && phoneResult.not_provided !== true
+        ? `valid=${String(phoneResult.phone_valid)}, voip=${String(phoneResult.phone_is_voip)}, country=${String(phoneResult.phone_country ?? "")}, carrier=${String(phoneResult.phone_carrier ?? "")}`
+        : "phone not validated or not provided";
+
+    const addressDigest =
+      addressResult?.configured === true && addressResult.not_provided !== true
+        ? `found=${String(addressResult.address_found)}, quality=${String(addressResult.address_quality_score ?? "")}, precision=${String(addressResult.address_precision ?? "")}`
+        : "address not geocoded or not provided";
+
+    const signalsDigest = signals
+      .map((s) => `${s.signal_type}:${s.signal_name} (${s.impact}) — ${s.description}`)
+      .join("\n");
+
+    const synth = await synthesizeAnalystNarrative({
+      triRaw,
+      networkProfile,
+      phoneDigest,
+      addressDigest,
+      finalScore,
+      riskLevel,
+      signalsDigest,
+      triRecommendationPrior: aiResult.recommendation
+    });
+
+    const analystNotesFinal =
+      synth?.analyst_notes?.trim() ||
+      (triRaw.tri_engine === true
+        ? "Tri-model analysis complete — see structured signals and scoring breakdown."
+        : aiResult.analyst_notes);
+    const recommendationFinal = synth?.recommendation || aiResult.recommendation;
+
+    const aiForSave: AiStructuredResult = {
+      ...aiResult,
+      analyst_notes: analystNotesFinal,
+      recommendation: recommendationFinal,
+      ai_raw_response: {
+        ...triRaw,
+        analyst_notes: analystNotesFinal,
+        recommendation: recommendationFinal,
+        synthesis: synth?.raw ?? null,
+        signal_conflicts_resolved: conflicts,
+        network_profile: networkProfile
+      }
+    };
 
     const phoneDbPayload =
       phoneResult?.configured === true && typeof phoneResult.phone_valid === "boolean"
@@ -364,16 +448,22 @@ export const POST = withAuth(async ({ req, user }) => {
         ? buyerAddressDb(addressResult)
         : {};
 
-    const aiPayload = buyerRowPayloadFromAi(aiResult);
+    const aiPayload = buyerRowPayloadFromAi(aiForSave);
     const mergedRaw = {
       ...(aiPayload.ai_raw_response as Record<string, unknown>),
       message_count: messageCount,
       attribution_summary: {
         total_messages: attribCounts.total,
+        buyer_high_confidence: attribCounts.buyer_high,
+        seller_high_confidence: attribCounts.seller_high,
+        buyer_medium_background: attribCounts.buyer_medium,
+        seller_medium_background: attribCounts.seller_medium,
+        unattributed_or_low_confidence: attribCounts.unattributed_low,
         buyer_for_scoring: attribCounts.buyer_for_scoring,
         seller_labeled: attribCounts.seller_labeled,
         uncertain: attribCounts.uncertain
       },
+      network_profile: networkProfile,
       ...(phoneResult.configured && phoneResult.not_provided !== true
         ? {
             phone_lookup_query: phoneResult.phone_lookup_query,
@@ -404,19 +494,19 @@ export const POST = withAuth(async ({ req, user }) => {
     await saveSignals(buyer.id, signals);
     await incrementUsage(user.id, user.email);
 
-    const raw = aiResult.ai_raw_response as Record<string, unknown> | undefined;
+    const raw = aiForSave.ai_raw_response as Record<string, unknown> | undefined;
 
     return Response.json(
       {
         buyer_id: buyer.id,
         trust_score: finalScore,
         risk_level: riskLevel,
-        analyst_notes: (raw?.analyst_notes as string | undefined) ?? aiResult.analyst_notes ?? null,
-        ai_reasons: aiResult.ai_reasons ?? [],
-        positive_signals: aiResult.positive_signals ?? [],
-        negative_signals: aiResult.negative_signals ?? [],
-        recommendation: aiResult.recommendation ?? "caution",
-        buyer_seriousness: aiResult.ai_buyer_seriousness ?? null,
+        analyst_notes: (raw?.analyst_notes as string | undefined) ?? analystNotesFinal ?? null,
+        ai_reasons: aiForSave.ai_reasons ?? [],
+        positive_signals: aiForSave.positive_signals ?? [],
+        negative_signals: aiForSave.negative_signals ?? [],
+        recommendation: recommendationFinal ?? "caution",
+        buyer_seriousness: aiForSave.ai_buyer_seriousness ?? null,
         commitment_confirmed: Boolean(raw?.commitment_confirmed),
         communication_quality: (raw?.communication_quality as string | null | undefined) ?? null,
         message_count: messageCount,
@@ -431,6 +521,8 @@ export const POST = withAuth(async ({ req, user }) => {
         address_analysis: addressResult,
         historical_data: historicalData ?? [],
         signals,
+        network_profile: networkProfile,
+        signal_conflicts_resolved: conflicts,
         cached: false,
         dashboard_url: `${appBase}/dashboard/buyers/${buyer.id}`,
         disclaimer:
