@@ -159,13 +159,15 @@ export function computeAttributionQuality(counts: AttributionCounts): Attributio
   if (degraded) {
     if (reason === "one_side_missing") {
       note_for_prompt =
-        "ATTRIBUTION WARNING: At high confidence, buyer and/or seller lines are missing on one side. " +
-        "Do not treat the confirmed buyer-only or seller-only blocks as ground truth. " +
-        "Use the uncertain / full context as weak signal; state conclusions cautiously.";
+        "ATTRIBUTION FAILED: High-confidence buyer and/or seller labels are missing on one side. " +
+        "Treat the entire conversation as ONE chronological thread. Ignore buyer vs seller section labels — they are not trustworthy for this run. " +
+        "Assess behavior only from what was said (substance, sequence, logistics language), not from who the UI claimed spoke. " +
+        "State conclusions cautiously and avoid buyer-specific claims that depend on correct attribution.";
     } else {
       note_for_prompt =
-        "ATTRIBUTION WARNING: High-confidence labels are heavily skewed to one side (>80%). " +
-        "Message direction may be wrong. Rely on sequence and content, not role tags; avoid strong claims that depend on who said what.";
+        "ATTRIBUTION FAILED: High-confidence labels are heavily skewed to one side (>80%). " +
+        "Merge CONFIRMED BUYER, CONFIRMED SELLER, and UNCERTAIN blocks mentally into a single timeline. " +
+        "Do not assume speaker roles are correct. Judge patterns from words and order alone; do not score as if attribution were reliable.";
     }
   }
 

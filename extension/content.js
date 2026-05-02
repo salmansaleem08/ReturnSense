@@ -90,6 +90,91 @@ function igRowLooksLikeIncomingBuyer(rowOrEl) {
   return false;
 }
 
+/** Set localStorage RS_ATTRIB_VERBOSE=1 to log per-message layer + confidence in the console. */
+function rsAttribVerboseEnabled() {
+  try {
+    return typeof localStorage !== "undefined" && localStorage.getItem("RS_ATTRIB_VERBOSE") === "1";
+  } catch (_e) {
+    return false;
+  }
+}
+
+/**
+ * Scrollable message list rect — narrows when extension panel steals width; avoids using full [role=main] midline.
+ */
+function rsResolveChatColumnRect(main) {
+  try {
+    const row = main?.querySelector?.('[role="row"]');
+    let node = row;
+    for (let i = 0; i < 28 && node; i++) {
+      const st = window.getComputedStyle(node);
+      const oy = st.overflowY;
+      if (
+        (oy === "auto" || oy === "scroll") &&
+        node.scrollHeight > node.clientHeight + 24
+      ) {
+        return node.getBoundingClientRect();
+      }
+      node = node.parentElement;
+    }
+  } catch (_e) {
+    /* ignore */
+  }
+  try {
+    return main.getBoundingClientRect();
+  } catch (_e) {
+    return { left: 0, width: 0, top: 0, bottom: 0, right: 0, height: 0 };
+  }
+}
+
+function rsPickMessageBubbleElement(messageEl) {
+  try {
+    /** @type {Element[]} */
+    const candidates = [];
+    if (typeof messageEl.matches === "function" && messageEl.matches('div[dir="auto"]')) {
+      candidates.push(messageEl);
+    }
+    const nodes =
+      typeof messageEl.querySelectorAll === "function"
+        ? messageEl.querySelectorAll('div[dir="auto"]')
+        : [];
+    for (let ni = 0; ni < nodes.length; ni++) {
+      candidates.push(nodes[ni]);
+    }
+    let best = null;
+    let bestW = 0;
+    for (let ci = 0; ci < candidates.length; ci++) {
+      const node = candidates[ci];
+      const r = node.getBoundingClientRect();
+      if (r.width > bestW && r.width > 4 && r.height > 2) {
+        bestW = r.width;
+        best = node;
+      }
+    }
+    return best;
+  } catch (_e) {
+    return null;
+  }
+}
+
+function rsPickMessageBubbleRect(messageEl) {
+  const el = rsPickMessageBubbleElement(messageEl);
+  if (el) {
+    try {
+      const r = el.getBoundingClientRect();
+      if (r.width > 2 && r.height > 2) return r;
+    } catch (_e) {
+      /* fall through */
+    }
+  }
+  try {
+    const r = messageEl.getBoundingClientRect();
+    return r.width > 2 && r.height > 2 ? r : null;
+  } catch (_e) {
+    return null;
+  }
+}
+
 /** Instagram obfuscated class tokens — refresh when DM shell redeploys (batch class renames). */
 const IG_CLASS_SELLER_MARKERS = new Set(["x13a6bvl", "x15zctf7"]);
 const IG_CLASS_BUYER_MARKERS = new Set(["x1g0dm76", "x16ye13r"]);
@@ -114,34 +199,58 @@ function igCollectClassTokensFromRowChain(rowOrEl, maxAncestors) {
   return tokens;
 }
 
-function igLayer1ClassFingerprint(el) {
+/** Primary: avatar / placeholder left of bubble — Instagram never shows your avatar on outgoing (seller) rows. */
+function igLayerAvatarPrimary(el) {
   try {
     const row = typeof el.closest === "function" ? el.closest('[role="row"]') : null;
     if (!row) return null;
-    const tokens = igCollectClassTokensFromRowChain(row, 5);
-    let sellerHits = 0;
-    let buyerHits = 0;
-    tokens.forEach((t) => {
-      if (IG_CLASS_SELLER_MARKERS.has(t)) sellerHits++;
-      if (IG_CLASS_BUYER_MARKERS.has(t)) buyerHits++;
-    });
-    const spanSeller =
-      typeof row.querySelector === "function"
-        ? row.querySelector(`span.${IG_SELLER_TEXT_SPAN_CLASS}`)
-        : null;
-    if (spanSeller) sellerHits += 2;
+    const bubbleRect = rsPickMessageBubbleRect(el);
+    const refLeft = bubbleRect ? bubbleRect.left : null;
+    const imgs = row.querySelectorAll("img");
+    for (let i = 0; i < imgs.length; i++) {
+      const img = imgs[i];
+      const r = img.getBoundingClientRect?.();
+      if (!r || r.width < 22 || r.width > 58 || r.height < 22 || r.height > 58) continue;
+      if (refLeft != null && r.right <= refLeft + 28 && r.left < refLeft) {
+        return { role: "buyer", layoutSource: "ig-avatar-img", confidence: 0.92 };
+      }
+    }
+    const divs = row.querySelectorAll("div");
+    for (let j = 0; j < divs.length; j++) {
+      const d = divs[j];
+      const r = d.getBoundingClientRect?.();
+      if (!r || r.width < 26 || r.width > 54 || r.height < 26 || r.height > 54) continue;
+      if (Math.abs(r.width - r.height) > 8) continue;
+      if (refLeft != null && r.right <= refLeft + 22 && r.left < refLeft - 2) {
+        return { role: "buyer", layoutSource: "ig-avatar-slot", confidence: 0.9 };
+      }
+    }
+  } catch (_e) {
+    /* ignore */
+  }
+  return null;
+}
 
-    if (sellerHits > 0 && buyerHits === 0) {
-      return { role: "seller", layoutSource: "ig-layer1-class", confidence: 0.93 };
+/** Structural: outgoing often wraps body copy in a substantive span; incoming may present as div-only paths. */
+function igLayerStructuralPresentation(el) {
+  try {
+    const bubbleEl = rsPickMessageBubbleElement(el);
+    if (!bubbleEl) return null;
+    const fullText = (bubbleEl.innerText || "").trim();
+    if (fullText.length < 4) return null;
+    const spans = bubbleEl.getElementsByTagName("span");
+    let maxSpanLen = 0;
+    for (let i = 0; i < spans.length; i++) {
+      const t = (spans[i].innerText || "").trim();
+      if (t.length > maxSpanLen) maxSpanLen = t.length;
     }
-    if (buyerHits > 0 && sellerHits === 0) {
-      return { role: "buyer", layoutSource: "ig-layer1-class", confidence: 0.93 };
+    const spanDominates =
+      maxSpanLen >= Math.max(10, fullText.length * 0.34) && maxSpanLen >= 8;
+    if (spanDominates) {
+      return { role: "seller", layoutSource: "ig-struct-span-text", confidence: 0.8 };
     }
-    if (sellerHits > buyerHits + 1) {
-      return { role: "seller", layoutSource: "ig-layer1-class-skew", confidence: 0.85 };
-    }
-    if (buyerHits > sellerHits + 1) {
-      return { role: "buyer", layoutSource: "ig-layer1-class-skew", confidence: 0.85 };
+    if (maxSpanLen < 6 && bubbleEl.querySelector("div")) {
+      return { role: "buyer", layoutSource: "ig-struct-div-body", confidence: 0.78 };
     }
   } catch (_e) {
     /* ignore */
@@ -188,30 +297,34 @@ function igLayer2SpacerSignal(el) {
   return null;
 }
 
-function igLayer3AvatarIncoming(el) {
+function igLayer1ClassFingerprint(el) {
   try {
     const row = typeof el.closest === "function" ? el.closest('[role="row"]') : null;
     if (!row) return null;
-    const bubbleRect = rsPickMessageBubbleRect(el);
-    const refLeft = bubbleRect ? bubbleRect.left : null;
-    const imgs = row.querySelectorAll("img");
-    for (let i = 0; i < imgs.length; i++) {
-      const img = imgs[i];
-      const r = img.getBoundingClientRect?.();
-      if (!r || r.width < 22 || r.width > 58 || r.height < 22 || r.height > 58) continue;
-      if (refLeft != null && r.right <= refLeft + 28 && r.left < refLeft) {
-        return { role: "buyer", layoutSource: "ig-layer3-avatar-img", confidence: 0.9 };
-      }
+    const tokens = igCollectClassTokensFromRowChain(row, 5);
+    let sellerHits = 0;
+    let buyerHits = 0;
+    tokens.forEach((t) => {
+      if (IG_CLASS_SELLER_MARKERS.has(t)) sellerHits++;
+      if (IG_CLASS_BUYER_MARKERS.has(t)) buyerHits++;
+    });
+    const spanSeller =
+      typeof row.querySelector === "function"
+        ? row.querySelector(`span.${IG_SELLER_TEXT_SPAN_CLASS}`)
+        : null;
+    if (spanSeller) sellerHits += 2;
+
+    if (sellerHits > 0 && buyerHits === 0) {
+      return { role: "seller", layoutSource: "ig-layer1-class", confidence: 0.93 };
     }
-    const divs = row.querySelectorAll("div");
-    for (let j = 0; j < divs.length; j++) {
-      const d = divs[j];
-      const r = d.getBoundingClientRect?.();
-      if (!r || r.width < 26 || r.width > 54 || r.height < 26 || r.height > 54) continue;
-      if (Math.abs(r.width - r.height) > 8) continue;
-      if (refLeft != null && r.right <= refLeft + 22 && r.left < refLeft - 2) {
-        return { role: "buyer", layoutSource: "ig-layer3-avatar-slot", confidence: 0.86 };
-      }
+    if (buyerHits > 0 && sellerHits === 0) {
+      return { role: "buyer", layoutSource: "ig-layer1-class", confidence: 0.93 };
+    }
+    if (sellerHits > buyerHits + 1) {
+      return { role: "seller", layoutSource: "ig-layer1-class-skew", confidence: 0.85 };
+    }
+    if (buyerHits > sellerHits + 1) {
+      return { role: "buyer", layoutSource: "ig-layer1-class-skew", confidence: 0.85 };
     }
   } catch (_e) {
     /* ignore */
@@ -219,40 +332,44 @@ function igLayer3AvatarIncoming(el) {
   return null;
 }
 
-function rsPickMessageBubbleRect(messageEl) {
+function rsDumpSampleRowClasses(main) {
   try {
-    /** @type {Element[]} */
-    const candidates = [];
-    if (typeof messageEl.matches === "function" && messageEl.matches('div[dir="auto"]')) {
-      candidates.push(messageEl);
+    const rows = main?.querySelectorAll?.('[role="row"]') ?? [];
+    const n = Math.min(6, rows.length);
+    console.warn("[RS-ATTRIB] Sample row class tokens (update IG_CLASS_* if IG redesigned DM UI):");
+    for (let i = 0; i < n; i++) {
+      const row = rows[i];
+      const tokens = [...igCollectClassTokensFromRowChain(row, 4)].slice(0, 48);
+      const preview = (row.innerText || "").trim().slice(0, 60).replace(/\s+/g, " ");
+      console.warn(`  [${i}]`, tokens.join(" "), "|", preview);
     }
-    const nodes =
-      typeof messageEl.querySelectorAll === "function"
-        ? messageEl.querySelectorAll('div[dir="auto"]')
-        : [];
-    for (let ni = 0; ni < nodes.length; ni++) {
-      candidates.push(nodes[ni]);
-    }
-    let best = null;
-    let bestW = 0;
-    for (let ci = 0; ci < candidates.length; ci++) {
-      const node = candidates[ci];
-      const r = node.getBoundingClientRect();
-      if (r.width > bestW && r.width > 4 && r.height > 2) {
-        bestW = r.width;
-        best = r;
-      }
-    }
-    if (best) return best;
   } catch (_e) {
-    /* fall through */
+    /* ignore */
   }
-  try {
-    const r = messageEl.getBoundingClientRect();
-    return r.width > 2 && r.height > 2 ? r : null;
-  } catch (_e) {
-    return null;
+}
+
+/** Self-heal hint: one-sided high-confidence harvest often means stale constants or a bad fallback. */
+function rsFingerprintSkewWarning(main) {
+  let bh = 0;
+  let sh = 0;
+  for (let i = 0; i < capturedMessages.length; i++) {
+    const m = capturedMessages[i];
+    const c = typeof m.attribution_confidence === "number" ? m.attribution_confidence : 0;
+    if (c < 0.72) continue;
+    if (m.role === "buyer") bh++;
+    else if (m.role === "seller") sh++;
   }
+  const dir = bh + sh;
+  if (dir < 8) return;
+  const skew = Math.max(bh, sh) / dir;
+  if (skew <= 0.8) return;
+  console.warn(
+    "[RS-ATTRIB] Heavily one-sided high-confidence labels (" +
+      Math.round(skew * 100) +
+      "%). IG class markers may be stale, or a geometry/flex fallback is dominating. " +
+      "Set localStorage RS_ATTRIB_VERBOSE=1 to log layer per message."
+  );
+  if (main) rsDumpSampleRowClasses(main);
 }
 
 /**
@@ -272,6 +389,13 @@ function harvestVisibleMessages() {
       mainRectForFilter = main.getBoundingClientRect();
     } catch (_e) {
       /* keep zeros */
+    }
+
+    let chatColumnRect = mainRectForFilter;
+    try {
+      chatColumnRect = rsResolveChatColumnRect(main);
+    } catch (_e) {
+      /* keep main rect */
     }
 
     if (elements.length === 0) {
@@ -305,11 +429,13 @@ function harvestVisibleMessages() {
 
       /**
        * Instagram Web DM attribution order:
-       * 1) Obfuscated class fingerprints + seller text span (stable across flex quirks).
-       * 2) Row spacers using --x-width (before bubble → buyer / after → seller).
-       * 3) Avatar slot / image left of bubble → incoming (buyer).
-       * 4) role="button" large wrappers on incoming bubbles.
-       * 5) Thread geometry vs [role=main], then flex, then viewport.
+       * 1) Avatar / square slot left of bubble → buyer (incoming).
+       * 2) Structural span-vs-div presentation (durable vs obfuscated class names).
+       * 3) --x-width row spacers.
+       * 4) Optional obfuscated class fingerprints (may need periodic updates).
+       * 5) role="button" wrappers on incoming bubbles.
+       * 6) Bubble X vs scrollable chat column (left/right 40% zones), not full viewport.
+       * 7) Flex justify-content, then viewport midline last resort.
        */
       let flexEndDepth = -1;
       let flexStartDepth = -1;
@@ -337,9 +463,10 @@ function harvestVisibleMessages() {
       const bubbleRect = rsPickMessageBubbleRect(el);
 
       const early =
-        igLayer1ClassFingerprint(el) ||
+        igLayerAvatarPrimary(el) ||
+        igLayerStructuralPresentation(el) ||
         igLayer2SpacerSignal(el) ||
-        igLayer3AvatarIncoming(el);
+        igLayer1ClassFingerprint(el);
 
       let role = "unknown";
       let layoutSource = "none";
@@ -355,35 +482,35 @@ function harvestVisibleMessages() {
         layoutSource = "ig-incoming-role-button";
       }
 
-      let mainRect = mainRectForFilter;
       let direction = "ltr";
       try {
-        mainRect = main.getBoundingClientRect();
         direction = String(getComputedStyle(main).direction || "ltr").toLowerCase();
       } catch (_e) {
-        /* use mainRectForFilter */
+        /* keep ltr */
       }
 
       const isRtl = direction === "rtl";
-      if (role === "unknown" && bubbleRect && mainRect.width > 80) {
-        const threadMid = mainRect.left + mainRect.width / 2;
+      const colRect = chatColumnRect.width > 40 ? chatColumnRect : mainRectForFilter;
+      if (role === "unknown" && bubbleRect && colRect.width > 80) {
         const cx = bubbleRect.left + bubbleRect.width / 2;
-        const slack = Math.max(10, Math.min(44, mainRect.width * 0.065));
+        const leftEdge = colRect.left;
+        const w = colRect.width;
+        const rel = (cx - leftEdge) / w;
         if (!isRtl) {
-          if (cx > threadMid + slack) {
-            role = "seller";
-            layoutSource = "geometry-thread";
-          } else if (cx < threadMid - slack) {
+          if (rel <= 0.4) {
             role = "buyer";
-            layoutSource = "geometry-thread";
+            layoutSource = "geometry-chat-column-left40";
+          } else if (rel >= 0.6) {
+            role = "seller";
+            layoutSource = "geometry-chat-column-right40";
           }
         } else {
-          if (cx < threadMid - slack) {
-            role = "seller";
-            layoutSource = "geometry-thread-rtl";
-          } else if (cx > threadMid + slack) {
+          if (rel >= 0.6) {
             role = "buyer";
-            layoutSource = "geometry-thread-rtl";
+            layoutSource = "geometry-chat-column-rtl-right40";
+          } else if (rel <= 0.4) {
+            role = "seller";
+            layoutSource = "geometry-chat-column-rtl-left40";
           }
         }
       }
@@ -423,8 +550,12 @@ function harvestVisibleMessages() {
       } else if (layoutSource === "ig-incoming-role-button") {
         attribution_confidence = 0.91;
         attribution_signals.push("ig-incoming-role-button");
-      } else if (layoutSource === "geometry-thread" || layoutSource === "geometry-thread-rtl") {
-        attribution_confidence = 0.88;
+      } else if (
+        layoutSource.startsWith("geometry-chat-column") ||
+        layoutSource === "geometry-thread" ||
+        layoutSource === "geometry-thread-rtl"
+      ) {
+        attribution_confidence = layoutSource.startsWith("geometry-chat-column") ? 0.86 : 0.88;
         attribution_signals.push(layoutSource);
       } else if (layoutSource === "geometry-viewport") {
         attribution_confidence = 0.62;
@@ -442,12 +573,21 @@ function harvestVisibleMessages() {
 
       const alreadyExists = capturedMessages.some((m) => m && m.text === text);
       if (!alreadyExists) {
+        if (rsAttribVerboseEnabled()) {
+          console.log("[RS-ATTRIB]", {
+            layer: layoutSource,
+            confidence: attribution_confidence,
+            role,
+            preview: text.slice(0, 72)
+          });
+        }
         capturedMessages.push({ role, text, attribution_confidence, attribution_signals });
       }
     }
 
     if (capturedMessages.length > countBefore) {
       resetCaptureIdleTimer();
+      rsFingerprintSkewWarning(main);
     }
 
     const counter = document.getElementById("rs-capture-counter");

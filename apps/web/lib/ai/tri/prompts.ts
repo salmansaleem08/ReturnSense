@@ -67,7 +67,11 @@ function transcriptHeader(ctx: TriSharedContext): string {
     ctx.attributionNote.length > 0
       ? `\n=== ATTRIBUTION / DIRECTION UNRELIABLE ===\n${ctx.attributionNote}\n`
       : "";
-  return `${warn}${ctx.networkBlock}
+  const mergeThread =
+    ctx.attributionNote.length > 0
+      ? `\n=== READ AS ONE CONVERSATION (IGNORE ROLE SECTIONS FOR SPEAKER IDENTITY) ===\nAll labeled sections below may mis-attribute speakers. Merge them into a single chronological thread mentally. Focus on what was said, not who the labels claim said it.\n`
+      : "";
+  return `${warn}${mergeThread}${ctx.networkBlock}
 
 Instagram handle (seller view): ${ctx.username}
 Phone field (seller tool): ${ctx.phone}
@@ -86,11 +90,15 @@ ${ctx.uncertainBackground}`;
 
 /** Model A — behavioral intent, sequence-aware, Pakistan / Roman Urdu. */
 export function promptBehavior(ctx: TriSharedContext) {
+  const criticalRole =
+    ctx.attributionNote.trim().length > 0
+      ? `CRITICAL: Message direction is UNRELIABLE for this run. Read every section below as one chronological conversation. Do not trust buyer vs seller labels — infer behavioral intent from content, sequence, and tone only. Do not make claims that depend on knowing which lines are truly "buyer".`
+      : `CRITICAL: You never see a mixed transcript. Buyer and seller lines are already separated. Evaluate ONLY confirmed buyer lines for buyer intent. Use seller lines only to understand sequence and what was asked. Uncertain lines are weak context — never treat them as proven buyer speech.`;
   return `You are Model A (behavioral intent) for Pakistani Instagram COD commerce.
 
 ${transcriptHeader(ctx)}
 
-CRITICAL: You never see a mixed transcript. Buyer and seller lines are already separated. Evaluate ONLY confirmed buyer lines for buyer intent. Use seller lines only to understand sequence and what was asked. Uncertain lines are weak context — never treat them as proven buyer speech.
+${criticalRole}
 
 Read the conversation as a TIME SEQUENCE (order matters). Compare:
 - A buyer who asks price → confirms → then asks returns is different from one who asks returns → price → reluctant confirm.
@@ -124,11 +132,15 @@ Output exactly one JSON object, no markdown:
 
 /** Model B — commitment depth spectrum. */
 export function promptCommitment(ctx: TriSharedContext) {
+  const criticalRole =
+    ctx.attributionNote.trim().length > 0
+      ? `CRITICAL: Speaker roles may be wrong. Assess commitment, withdrawal, and "cannot receive" language across the full merged thread — do not restrict analysis to lines tagged buyer.`
+      : `Use ONLY confirmed buyer lines for buyer commitment; seller lines provide dialogue sequence. Withdrawal / cannot-receive still override any earlier "ok".`;
   return `You are Model B (commitment depth) for Pakistani Instagram COD.
 
 ${transcriptHeader(ctx)}
 
-Use ONLY confirmed buyer lines for buyer commitment; seller lines provide dialogue sequence. Withdrawal / cannot-receive still override any earlier "ok".
+${criticalRole}
 
 If the buyer (any language) later cancels, refuses, or says delivery is impossible, set buyer_withdrew_cancelled_or_refused_order or buyer_cannot_receive_delivery_stated and treat confirmation as void.
 
@@ -159,11 +171,15 @@ Output exactly one JSON object, no markdown:
 
 /** Model C — Pakistan-specific fraud patterns with graded strengths. */
 export function promptFraud(ctx: TriSharedContext) {
+  const criticalRole =
+    ctx.attributionNote.trim().length > 0
+      ? `CRITICAL: Role tags are unreliable — score fraud patterns from substance across the ENTIRE transcript (all sections), not only lines labeled buyer.`
+      : ``;
   return `You are Model C (fraud pattern rater) for Pakistani Instagram COD / cash-on-delivery.
 
 ${transcriptHeader(ctx)}
 
-Rate pattern STRENGTH for each 0–3 (0 absent, 1 mild, 2 strong, 3 very strong). Mild may be innocent hesitation; high scores are dangerous.
+${criticalRole ? `${criticalRole}\n\n` : ""}Rate pattern STRENGTH for each 0–3 (0 absent, 1 mild, 2 strong, 3 very strong). Mild may be innocent hesitation; high scores are dangerous.
 
 Patterns (concrete definitions):
 - confirmation_ghost: enthusiastic warm confirm but no verifiable phone/address in chat when expected for COD.

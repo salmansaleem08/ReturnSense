@@ -21,6 +21,8 @@ interface ScoreInput {
   networkIgRow?: NetworkIgRow | null;
   /** Per-signal multiplier after MIN observations (learning layer); absent keys default to 1. */
   signalWeightMap?: Record<string, number>;
+  /** Server flagged unreliable message direction — discount final score (uncertainty, not fraud). */
+  attributionUnreliable?: boolean;
 }
 
 interface Signal {
@@ -106,7 +108,8 @@ export function computeFinalScore({
   chatMessages,
   buyerScoringCount,
   networkIgRow,
-  signalWeightMap
+  signalWeightMap,
+  attributionUnreliable
 }: ScoreInput) {
   const signals: Signal[] = [];
   const wm = signalWeightMap;
@@ -255,6 +258,18 @@ export function computeFinalScore({
   );
 
   let finalScore = Math.round(Math.max(0, Math.min(100, weightedScore)));
+
+  if (attributionUnreliable === true) {
+    const beforeAttrib = finalScore;
+    finalScore = Math.round(Math.max(0, Math.min(100, finalScore * 0.87)));
+    signals.push({
+      signal_type: "chat",
+      signal_name: "attribution_direction_uncertain",
+      impact: finalScore - beforeAttrib,
+      description:
+        "Buyer vs seller labels were unreliable for this chat — trust score is discounted to reflect uncertainty (not because the buyer looked worse)."
+    });
+  }
 
   const row = networkIgRow ?? null;
   const ceiling = computeNetworkScoreCeiling(row);

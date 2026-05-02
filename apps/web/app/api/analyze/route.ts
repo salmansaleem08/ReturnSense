@@ -389,7 +389,8 @@ export const POST = withAuth(async ({ req, user }) => {
       chatMessages: messages,
       buyerScoringCount: attribCounts.buyer_for_scoring,
       networkIgRow: networkIg,
-      signalWeightMap
+      signalWeightMap,
+      attributionUnreliable: attributionQuality.unreliable
     });
 
     const triRaw = (aiResult.ai_raw_response ?? {}) as Record<string, unknown>;
