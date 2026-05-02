@@ -1,28 +1,15 @@
 "use client";
 
-import type { CSSProperties } from "react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { AuthMarketingPanel } from "@/components/auth/auth-marketing-panel";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const USERNAME_RE = /^[\w.]{3,30}$/;
-
-function inputStyle(): CSSProperties {
-  return {
-    width: "100%",
-    background: "#FAFAFA",
-    border: "1px solid #DBDBDB",
-    borderRadius: "6px",
-    padding: "9px 10px",
-    fontSize: "14px",
-    color: "#262626",
-    marginBottom: "8px",
-    outline: "none",
-    boxSizing: "border-box"
-  };
-}
 
 export default function SignupPage() {
   const router = useRouter();
@@ -69,134 +56,107 @@ export default function SignupPage() {
     setPending(false);
   }
 
+  const inputClass =
+    "w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm text-foreground outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring";
+
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#FAFAFA",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        paddingTop: "8vh",
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
-      }}
-    >
-      <div
-        style={{
-          width: "40px",
-          height: "40px",
-          background: "#262626",
-          borderRadius: "10px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "white",
-          fontWeight: 700,
-          fontSize: "22px",
-          fontFamily: "Georgia, serif",
-          marginBottom: "20px"
-        }}
-      >
-        R
-      </div>
-
-      <div
-        style={{
-          width: "100%",
-          maxWidth: "350px",
-          background: "#FFFFFF",
-          border: "1px solid #DBDBDB",
-          borderRadius: "4px",
-          padding: "36px 36px 20px",
-          marginBottom: "10px"
-        }}
-      >
-        <h1 style={{ fontSize: "22px", fontWeight: 600, textAlign: "center", marginBottom: "18px", color: "#262626" }}>
-          Sign up
-        </h1>
-        <form onSubmit={(e) => void handleSubmit(e)}>
-          <input
-            style={inputStyle()}
-            type="text"
-            placeholder="Full Name"
-            autoComplete="name"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            required
-          />
-          <input
-            style={inputStyle()}
-            type="text"
-            placeholder="Username"
-            autoComplete="username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value.toLowerCase())}
-            required
-          />
-          <input
-            style={inputStyle()}
-            type="email"
-            placeholder="Email address"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <input
-            style={inputStyle()}
-            type="password"
-            placeholder="Password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-          />
-          <button
-            type="submit"
-            disabled={pending || !formValid}
-            style={{
-              width: "100%",
-              background: "#0095F6",
-              color: "white",
-              border: "none",
-              borderRadius: "8px",
-              padding: "8px",
-              fontSize: "14px",
-              fontWeight: 600,
-              cursor: pending ? "wait" : "pointer",
-              opacity: pending || !formValid ? 0.45 : 1,
-              marginTop: "6px"
-            }}
-          >
-            {pending ? "Signing up…" : "Sign up"}
-          </button>
-          {error ? (
-            <p style={{ color: "#ED4956", fontSize: "13px", textAlign: "center", marginTop: "12px" }}>{error}</p>
-          ) : null}
-          <p style={{ fontSize: "11px", color: "#8E8E8E", marginTop: "12px", textAlign: "center", lineHeight: 1.4 }}>
-            Username: letters, numbers, underscores, dots — 3–30 characters.
-          </p>
-        </form>
-      </div>
-
-      <div
-        style={{
-          width: "100%",
-          maxWidth: "350px",
-          background: "#FFFFFF",
-          border: "1px solid #DBDBDB",
-          borderRadius: "4px",
-          padding: "20px",
-          textAlign: "center",
-          fontSize: "14px",
-          color: "#262626"
-        }}
-      >
-        Have an account?{" "}
-        <Link href="/login" style={{ color: "#0095F6", fontWeight: 600 }}>
-          Log in
+    <div className="min-h-screen bg-gradient-to-b from-background via-background to-muted/30">
+      <div className="absolute right-4 top-4 flex gap-2">
+        <ThemeToggle />
+        <Link
+          href="/"
+          className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted"
+        >
+          Home
         </Link>
+      </div>
+
+      <div className="mx-auto grid min-h-screen max-w-6xl grid-cols-1 gap-8 px-4 py-16 lg:grid-cols-2 lg:items-center lg:gap-12 lg:px-8 lg:py-12">
+        <div className="order-2 lg:order-1">
+          <div className="mx-auto w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-xl shadow-black/5 dark:shadow-black/30">
+            <div className="mb-8 text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-violet-600 text-xl font-bold text-white">
+                R
+              </div>
+              <h1 className="text-2xl font-bold text-foreground">Create your account</h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Join sellers who use ReturnSense to stress-test COD decisions before every shipment.
+              </p>
+            </div>
+            <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Full name</label>
+                <input
+                  className={inputClass}
+                  type="text"
+                  placeholder="Your name"
+                  autoComplete="name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Username</label>
+                <input
+                  className={inputClass}
+                  type="text"
+                  placeholder="seller_handle"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Email</label>
+                <input
+                  className={inputClass}
+                  type="email"
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Password</label>
+                <input
+                  className={inputClass}
+                  type="password"
+                  placeholder="At least 8 characters"
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={8}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={pending || !formValid}
+                className="w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 transition hover:opacity-90 disabled:opacity-45"
+              >
+                {pending ? "Signing up…" : "Sign up"}
+              </button>
+              {error ? <p className="text-center text-sm text-destructive">{error}</p> : null}
+              <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
+                Username: letters, numbers, underscores, dots — 3–30 characters.
+              </p>
+            </form>
+            <p className="mt-6 text-center text-sm text-muted-foreground">
+              Already have an account?{" "}
+              <Link href="/login" className="font-semibold text-primary hover:underline">
+                Log in
+              </Link>
+            </p>
+          </div>
+        </div>
+
+        <div className="order-1 lg:order-2">
+          <AuthMarketingPanel />
+        </div>
       </div>
     </div>
   );

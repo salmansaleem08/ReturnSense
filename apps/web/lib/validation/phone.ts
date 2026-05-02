@@ -1,12 +1,21 @@
+import { normalizePhoneForLookup } from "@/lib/validation/phone-normalize";
+
 export interface PhoneValidationResult {
   phone_valid: boolean | null;
   phone_carrier: string | null;
   phone_is_voip: boolean | null;
   phone_type: string | null;
   phone_country: string | null;
+  /** Registered line region/state when API returns it (e.g. Punjab). */
+  phone_region: string | null;
+  /** City associated with number when available. */
+  phone_city: string | null;
   phone_international_format: string | null;
   phone_local_format: string | null;
+  /** Original submitted digits/text (seller-facing). */
   phone_number: string | null;
+  /** E.164-style query sent to the carrier API when normalization ran. */
+  phone_lookup_query: string | null;
   configured: boolean;
   not_provided: boolean;
   error: string | null;
@@ -14,6 +23,10 @@ export interface PhoneValidationResult {
 
 /** @deprecated use PhoneValidationResult — kept for existing imports */
 export type PhoneResult = PhoneValidationResult;
+
+function digitsOnly(s: string): string {
+  return s.replace(/\D/g, "");
+}
 
 function getAbstractApiKey(): string | null {
   const raw =
@@ -60,6 +73,8 @@ function mapPhoneIntelligencePayload(data: Record<string, unknown>): {
   phone_is_voip: boolean | null;
   phone_type: string | null;
   phone_country: string | null;
+  phone_region: string | null;
+  phone_city: string | null;
   phone_international_format: string | null;
   phone_local_format: string | null;
 } {
@@ -80,6 +95,8 @@ function mapPhoneIntelligencePayload(data: Record<string, unknown>): {
 
   const phone_carrier = typeof pc?.name === "string" ? pc.name : null;
   const phone_country = typeof pl?.country_name === "string" ? pl.country_name : null;
+  const phone_region = typeof pl?.region === "string" ? pl.region : null;
+  const phone_city = typeof pl?.city === "string" ? pl.city : null;
   const phone_international_format =
     typeof pf?.international === "string" ? pf.international : null;
   const phone_local_format = typeof pf?.national === "string" ? pf.national : null;
@@ -90,6 +107,8 @@ function mapPhoneIntelligencePayload(data: Record<string, unknown>): {
     phone_is_voip,
     phone_type: lineFromCarrier,
     phone_country,
+    phone_region,
+    phone_city,
     phone_international_format,
     phone_local_format
   };
@@ -104,50 +123,72 @@ function abstractPayloadRoot(data: Record<string, unknown>): Record<string, unkn
   return data;
 }
 
+function emptyPhoneResult(
+  partial: Partial<PhoneValidationResult> & Pick<PhoneValidationResult, "configured" | "not_provided">
+): PhoneValidationResult {
+  return {
+    phone_valid: null,
+    phone_carrier: null,
+    phone_is_voip: null,
+    phone_type: null,
+    phone_country: null,
+    phone_region: null,
+    phone_city: null,
+    phone_international_format: null,
+    phone_local_format: null,
+    phone_number: null,
+    phone_lookup_query: null,
+    error: null,
+    ...partial
+  };
+}
+
 export async function validatePhone(phoneInput?: string | null): Promise<PhoneValidationResult> {
   const apiKey = getAbstractApiKey();
 
-  const cleanPhone = phoneInput?.replace(/[\s\-.]/g, "") ?? "";
+  const rawDisplay = typeof phoneInput === "string" ? phoneInput.trim() : "";
+  const cleanPhone = rawDisplay.replace(/[\s\-.]/g, "");
+  const normalized = rawDisplay.length ? normalizePhoneForLookup(rawDisplay) : null;
+
+  /** Prefer E.164 (+92… for PK mobiles starting with 03…). */
+  const lookupQuery =
+    normalized && normalized.e164.length >= 3
+      ? normalized.e164
+      : cleanPhone.length
+        ? cleanPhone.startsWith("+")
+          ? `+${digitsOnly(cleanPhone)}`
+          : `+${digitsOnly(cleanPhone)}`
+        : "";
 
   if (!apiKey) {
     console.warn(
       "[RS-PHONE] ABSTRACT_API_KEY not set — set ABSTRACT_API_KEY (or ABSTRACT_PHONE_API_KEY) on the server. Phone carrier/valid checks disabled."
     );
-    return {
-      phone_valid: null,
-      phone_carrier: null,
-      phone_is_voip: null,
-      phone_type: null,
-      phone_country: null,
-      phone_international_format: null,
-      phone_local_format: null,
+    return emptyPhoneResult({
       phone_number: cleanPhone || null,
+      phone_lookup_query: null,
       configured: false,
       not_provided: false,
       error: "ABSTRACT_API_KEY environment variable is not set on the server"
-    };
+    });
   }
 
   if (!cleanPhone) {
-    return {
-      phone_valid: null,
-      phone_carrier: null,
-      phone_is_voip: null,
-      phone_type: null,
-      phone_country: null,
-      phone_international_format: null,
-      phone_local_format: null,
+    return emptyPhoneResult({
       phone_number: null,
       configured: true,
-      not_provided: true,
-      error: null
-    };
+      not_provided: true
+    });
+  }
+
+  if (normalized?.hint) {
+    console.log("[RS-PHONE] Normalized input:", normalized.hint, "→", lookupQuery);
   }
 
   try {
     const base = getAbstractPhoneApiBase();
-    const url = `${base}/?api_key=${encodeURIComponent(apiKey)}&phone=${encodeURIComponent(cleanPhone)}`;
-    console.log("[RS-PHONE] Using Abstract phone API base:", base);
+    const url = `${base}/?api_key=${encodeURIComponent(apiKey)}&phone=${encodeURIComponent(lookupQuery)}`;
+    console.log("[RS-PHONE] Using Abstract phone API base:", base, "query:", lookupQuery);
     const response = await fetch(url, {
       method: "GET",
       headers: { Accept: "application/json" },
@@ -166,38 +207,26 @@ export async function validatePhone(phoneInput?: string | null): Promise<PhoneVa
         detail = `Phone API rate limit or plan issue (${response.status}). Check Abstract dashboard billing and quotas.`;
       }
 
-      return {
-        phone_valid: null,
-        phone_carrier: null,
-        phone_is_voip: null,
-        phone_type: null,
-        phone_country: null,
-        phone_international_format: null,
-        phone_local_format: null,
+      return emptyPhoneResult({
         phone_number: cleanPhone,
+        phone_lookup_query: lookupQuery,
         configured: true,
         not_provided: false,
         error: detail
-      };
+      });
     }
 
     const data = (await response.json()) as Record<string, unknown>;
 
     if (data?.error) {
       console.error("[RS] Abstract API payload error:", data.error);
-      return {
-        phone_valid: null,
-        phone_carrier: null,
-        phone_is_voip: null,
-        phone_type: null,
-        phone_country: null,
-        phone_international_format: null,
-        phone_local_format: null,
+      return emptyPhoneResult({
         phone_number: cleanPhone,
+        phone_lookup_query: lookupQuery,
         configured: true,
         not_provided: false,
         error: String(data.error)
-      };
+      });
     }
 
     if (isPhoneIntelligencePayload(data)) {
@@ -206,6 +235,7 @@ export async function validatePhone(phoneInput?: string | null): Promise<PhoneVa
       return {
         ...mapped,
         phone_number: cleanPhone,
+        phone_lookup_query: lookupQuery,
         configured: true,
         not_provided: false,
         error: null
@@ -246,9 +276,12 @@ export async function validatePhone(phoneInput?: string | null): Promise<PhoneVa
       phone_is_voip: isVoip,
       phone_type: lineType,
       phone_country: countryName,
+      phone_region: null,
+      phone_city: null,
       phone_international_format: intl,
       phone_local_format: local,
       phone_number: cleanPhone,
+      phone_lookup_query: lookupQuery,
       configured: true,
       not_provided: false,
       error: null
@@ -256,19 +289,13 @@ export async function validatePhone(phoneInput?: string | null): Promise<PhoneVa
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[RS] validatePhone threw:", message);
-    return {
-      phone_valid: null,
-      phone_carrier: null,
-      phone_is_voip: null,
-      phone_type: null,
-      phone_country: null,
-      phone_international_format: null,
-      phone_local_format: null,
+    return emptyPhoneResult({
       phone_number: cleanPhone,
+      phone_lookup_query: lookupQuery || null,
       configured: true,
       not_provided: false,
       error: `Phone validation failed: ${message}`
-    };
+    });
   }
 }
 

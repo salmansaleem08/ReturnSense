@@ -25,6 +25,8 @@ export interface Buyer {
   phone_carrier: string | null;
   phone_is_voip: boolean | null;
   phone_country: string | null;
+  phone_region: string | null;
+  phone_city: string | null;
   ai_trust_score: number | null;
   ai_risk_level: "low" | "medium" | "high" | "critical" | null;
   ai_hesitation_detected: boolean | null;
@@ -67,9 +69,12 @@ export interface PhoneResult {
   phone_carrier: string | null;
   phone_is_voip: boolean | null;
   phone_country: string | null;
+  phone_region?: string | null;
+  phone_city?: string | null;
   phone_type?: string | null;
   phone_local_format?: string | null;
   phone_international_format?: string | null;
+  phone_lookup_query?: string | null;
   configured?: boolean;
   error?: string;
 }

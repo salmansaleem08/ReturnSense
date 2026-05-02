@@ -131,7 +131,7 @@ export default function AnalyticsPage() {
   if (loading) {
     return (
       <div
-        className="rounded-[var(--radius-md)] border border-[#DBDBDB] bg-white p-8 text-center text-sm"
+        className="rounded-[var(--radius-md)] border border-border bg-card p-8 text-center text-sm"
         style={{ color: "var(--ig-text-secondary)" }}
       >
         Loading analytics…
@@ -157,7 +157,7 @@ export default function AnalyticsPage() {
               <XAxis dataKey="bucket" tick={{ fill: "#8E8E8E", fontSize: 11 }} />
               <YAxis allowDecimals={false} tick={{ fill: "#8E8E8E", fontSize: 11 }} />
               <Tooltip
-                contentStyle={{ border: "1px solid #DBDBDB", borderRadius: 8, fontSize: 12 }}
+                contentStyle={{ border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, background: "var(--card)" }}
               />
               <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                 {trustDistribution.map((_, i) => (
@@ -175,7 +175,7 @@ export default function AnalyticsPage() {
               <XAxis dataKey="day" tick={{ fill: "#8E8E8E", fontSize: 11 }} />
               <YAxis allowDecimals={false} tick={{ fill: "#8E8E8E", fontSize: 11 }} />
               <Tooltip
-                contentStyle={{ border: "1px solid #DBDBDB", borderRadius: 8, fontSize: 12 }}
+                contentStyle={{ border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, background: "var(--card)" }}
               />
               <Line type="monotone" dataKey="count" stroke="#0095F6" strokeWidth={2} dot={false} />
             </LineChart>
@@ -233,7 +233,7 @@ export default function AnalyticsPage() {
 function Kpi({ title, value, accent }: { title: string; value: number; accent: string }) {
   return (
     <div
-      className="rounded-[var(--radius-md)] border border-[#DBDBDB] bg-white p-4 transition-shadow hover:shadow-sm"
+      className="rounded-[var(--radius-md)] border border-border bg-card p-4 transition-shadow hover:shadow-sm"
       style={{ borderTopWidth: 3, borderTopColor: accent }}
     >
       <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--ig-text-muted)" }}>
@@ -249,7 +249,7 @@ function Kpi({ title, value, accent }: { title: string; value: number; accent: s
 function ChartCard({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div
-      className="rounded-[var(--radius-md)] border border-[#DBDBDB] bg-white p-4"
+      className="rounded-[var(--radius-md)] border border-border bg-card p-4"
       style={{ boxShadow: "none" }}
     >
       <h3 className="mb-3 text-sm font-semibold" style={{ color: "var(--ig-text-primary)" }}>

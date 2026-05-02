@@ -30,17 +30,9 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--ig-bg, #FAFAFA)" }}>
+    <div className="min-h-screen bg-background">
       <TopNav />
-      <main
-        className="rs-dashboard-main motion-safe:animate-[rs-fade-in_0.35s_ease-out]"
-        style={{
-          width: "100%",
-          maxWidth: "100%",
-          margin: 0,
-          padding: "28px clamp(16px, 4vw, 48px) 48px"
-        }}
-      >
+      <main className="rs-dashboard-main motion-safe:animate-[rs-fade-in_0.35s_ease-out] w-full max-w-full px-4 py-7 sm:px-6 lg:px-12 lg:pb-12">
         {children}
       </main>
     </div>

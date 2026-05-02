@@ -1,10 +1,6 @@
 import { ReactNode } from "react";
 
-/** Minimal layout — pages implement Instagram-style centered cards */
+/** Auth pages supply their own full layout (gradient + split panels). */
 export default function AuthLayout({ children }: { children: ReactNode }) {
-  return (
-    <div className="min-h-screen" style={{ background: "#FAFAFA" }}>
-      {children}
-    </div>
-  );
+  return <>{children}</>;
 }

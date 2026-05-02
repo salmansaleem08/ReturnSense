@@ -16,19 +16,21 @@ import { checkQuota, incrementUsage } from "@/lib/db/profiles";
 import { computeFinalScore } from "@/lib/risk/score-engine";
 import type { AddressResult } from "@/lib/validation/address";
 import { validateAddress } from "@/lib/validation/address";
-import type { PhoneResult } from "@/lib/validation/phone";
+import type { PhoneResult, PhoneValidationResult } from "@/lib/validation/phone";
 import { validatePhone } from "@/lib/validation/phone";
 import { logAttributionSummary, summarizeAttribution, type AnalyzedMessage } from "@/lib/analysis/attribution";
 import { getNetworkIgStats } from "@/lib/network/network-layer";
 import { getSignalWeightMap } from "@/lib/network/signal-learning";
 
 /** Only columns that exist on `public.buyers` — PostgREST rejects unknown keys. */
-function buyerPhoneDb(p: PhoneResult & { phone_valid: boolean }) {
+function buyerPhoneDb(p: PhoneValidationResult & { phone_valid: boolean }) {
   return {
     phone_valid: p.phone_valid,
     phone_carrier: p.phone_carrier ?? null,
     phone_is_voip: p.phone_is_voip ?? null,
-    phone_country: p.phone_country ?? null
+    phone_country: p.phone_country ?? null,
+    phone_region: p.phone_region ?? null,
+    phone_city: p.phone_city ?? null
   };
 }
 
@@ -89,14 +91,18 @@ function canonicalMessagesForHash(
 
 function phoneFromBuyerRow(buyer: Record<string, unknown>): PhoneResult {
   const num = buyer.phone_number != null ? String(buyer.phone_number) : "";
+  const raw = (buyer.ai_raw_response as Record<string, unknown> | undefined) ?? {};
   return {
     phone_valid: typeof buyer.phone_valid === "boolean" ? buyer.phone_valid : null,
     phone_carrier: (buyer.phone_carrier as string) ?? null,
     phone_is_voip: typeof buyer.phone_is_voip === "boolean" ? buyer.phone_is_voip : null,
-    phone_type: null,
+    phone_type: (raw.phone_type as string) ?? null,
     phone_country: (buyer.phone_country as string) ?? null,
-    phone_international_format: null,
-    phone_local_format: null,
+    phone_region: (buyer.phone_region as string) ?? (raw.phone_region as string) ?? null,
+    phone_city: (buyer.phone_city as string) ?? (raw.phone_city as string) ?? null,
+    phone_international_format: (raw.phone_international_format as string) ?? null,
+    phone_local_format: (raw.phone_local_format as string) ?? null,
+    phone_lookup_query: (raw.phone_lookup_query as string) ?? null,
     phone_number: num || null,
     configured: true,
     not_provided: !num.length,
@@ -290,15 +296,18 @@ export const POST = withAuth(async ({ req, user }) => {
       getSignalWeightMap()
     ]);
 
-    const phoneNotProvided: PhoneResult = {
+    const phoneNotProvided: PhoneValidationResult = {
       phone_valid: null,
       phone_carrier: null,
       phone_is_voip: null,
       phone_type: null,
       phone_country: null,
+      phone_region: null,
+      phone_city: null,
       phone_international_format: null,
       phone_local_format: null,
       phone_number: null,
+      phone_lookup_query: null,
       configured: true,
       not_provided: true,
       error: null
@@ -364,7 +373,17 @@ export const POST = withAuth(async ({ req, user }) => {
         buyer_for_scoring: attribCounts.buyer_for_scoring,
         seller_labeled: attribCounts.seller_labeled,
         uncertain: attribCounts.uncertain
-      }
+      },
+      ...(phoneResult.configured && phoneResult.not_provided !== true
+        ? {
+            phone_lookup_query: phoneResult.phone_lookup_query,
+            phone_region: phoneResult.phone_region,
+            phone_city: phoneResult.phone_city,
+            phone_international_format: phoneResult.phone_international_format,
+            phone_local_format: phoneResult.phone_local_format,
+            phone_type: phoneResult.phone_type
+          }
+        : {})
     };
 
     const buyer = await saveBuyer({

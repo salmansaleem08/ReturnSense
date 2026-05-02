@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { JetBrains_Mono, Manrope } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { validateEnv } from "@/lib/env";
+import { ThemeScript } from "@/components/theme-script";
 import { Toaster } from "@/components/ui/toaster";
 
 const manrope = Manrope({
@@ -34,6 +35,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="font-sans antialiased">
+        <ThemeScript />
         {children}
         <Toaster />
       </body>

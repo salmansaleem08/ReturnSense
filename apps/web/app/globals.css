@@ -120,6 +120,15 @@ html {
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+    /* Instagram-style tokens in dark (dashboard hero / legacy) */
+    --ig-bg: oklch(0.16 0.01 260);
+    --ig-surface: oklch(0.2 0.01 260);
+    --ig-border: oklch(0.32 0.01 260);
+    --ig-border-light: oklch(0.28 0.01 260);
+    --ig-text-primary: oklch(0.96 0.01 260);
+    --ig-text-secondary: oklch(0.7 0.01 260);
+    --ig-text-muted: oklch(0.55 0.01 260);
+    --ig-blue-light: oklch(0.26 0.04 250);
   }
 
   * {
@@ -260,5 +269,16 @@ html {
 }
 .rs-stagger > *:nth-child(6) {
   animation-delay: 0.3s;
+}
+
+.rs-gradient-border {
+  background: linear-gradient(135deg, hsl(160 84% 42% / 0.35), hsl(199 89% 48% / 0.25), hsl(270 70% 55% / 0.2));
+  padding: 1px;
+  border-radius: var(--radius-lg);
+}
+
+.rs-gradient-border > .rs-gradient-inner {
+  border-radius: calc(var(--radius-lg) - 1px);
+  background: var(--card);
 }
 

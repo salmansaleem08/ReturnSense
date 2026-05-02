@@ -78,7 +78,7 @@ export default function DashboardPage() {
   const chartData = stats?.analyses_by_day ?? [];
 
   return (
-    <div className="space-y-6" style={{ color: "var(--ig-text-primary, #262626)" }}>
+    <div className="space-y-6 text-foreground">
       <DashboardHero />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 rs-stagger">
@@ -116,16 +116,9 @@ export default function DashboardPage() {
         )}
       </section>
 
-      <section
-        className="rounded-[8px] border border-[#DBDBDB] bg-white p-4 motion-safe:animate-[rs-fade-in_0.5s_ease-out]"
-        style={{ boxShadow: "none" }}
-      >
-        <h2 className="mb-1 text-sm font-semibold" style={{ color: "var(--ig-text-primary, #262626)" }}>
-          Analysis activity
-        </h2>
-        <p className="mb-3 text-xs" style={{ color: "var(--ig-text-muted, #8E8E8E)" }}>
-          New buyer analyses per day (last 14 days)
-        </p>
+      <section className="motion-safe:animate-[rs-fade-in_0.5s_ease-out] rounded-xl border border-border bg-card p-4 shadow-none">
+        <h2 className="mb-1 text-sm font-semibold text-foreground">Analysis activity</h2>
+        <p className="mb-3 text-xs text-muted-foreground">New buyer analyses per day (last 14 days)</p>
         {loading ? (
           <Skeleton className="h-[200px] w-full rounded-[var(--radius-md)]" />
         ) : (
@@ -138,19 +131,24 @@ export default function DashboardPage() {
                     <stop offset="100%" stopColor="#0095F6" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#EFEFEF" />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#8E8E8E" }} axisLine={{ stroke: "#DBDBDB" }} />
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis
+                  dataKey="day"
+                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+                  axisLine={{ stroke: "var(--border)" }}
+                />
                 <YAxis
                   allowDecimals={false}
                   width={32}
-                  tick={{ fontSize: 11, fill: "#8E8E8E" }}
-                  axisLine={{ stroke: "#DBDBDB" }}
+                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+                  axisLine={{ stroke: "var(--border)" }}
                 />
                 <Tooltip
                   contentStyle={{
-                    border: "1px solid #DBDBDB",
+                    border: "1px solid var(--border)",
                     borderRadius: 8,
-                    fontSize: 12
+                    fontSize: 12,
+                    background: "var(--card)"
                   }}
                 />
                 <Area
@@ -166,23 +164,10 @@ export default function DashboardPage() {
         )}
       </section>
 
-      <section
-        className="rounded-[8px] p-4 motion-safe:animate-[rs-fade-in_0.55s_ease-out]"
-        style={{
-          background: "var(--ig-surface, #fff)",
-          border: "1px solid #DBDBDB",
-          boxShadow: "none"
-        }}
-      >
+      <section className="motion-safe:animate-[rs-fade-in_0.55s_ease-out] rounded-xl border border-border bg-card p-4 shadow-none">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold" style={{ color: "var(--ig-text-primary, #262626)" }}>
-            Recent buyer analyses
-          </h2>
-          <Link
-            href="/dashboard/buyers"
-            className="text-xs font-semibold"
-            style={{ color: "var(--ig-blue, #0095F6)" }}
-          >
+          <h2 className="text-sm font-semibold text-foreground">Recent buyer analyses</h2>
+          <Link href="/dashboard/buyers" className="text-xs font-semibold text-primary">
             View all
           </Link>
         </div>
@@ -198,13 +183,9 @@ export default function DashboardPage() {
           <TableBody>
             {recent.length ? (
               recent.map((row) => (
-                <TableRow key={row.id} className="transition-colors hover:bg-[#FAFAFA]">
+                <TableRow key={row.id} className="transition-colors hover:bg-muted/50">
                   <TableCell>
-                    <Link
-                      href={`/dashboard/buyers/${row.id}`}
-                      className="font-medium hover:underline"
-                      style={{ color: "var(--ig-blue, #0095F6)" }}
-                    >
+                    <Link href={`/dashboard/buyers/${row.id}`} className="font-medium text-primary hover:underline">
                       @{row.instagram_username}
                     </Link>
                   </TableCell>
@@ -230,14 +211,9 @@ export default function DashboardPage() {
         </Table>
       </section>
 
-      <section
-        className="rounded-[var(--radius-md)] border border-[#DBDBDB] bg-white p-5 motion-safe:animate-[rs-fade-in_0.6s_ease-out]"
-        style={{ boxShadow: "none" }}
-      >
-        <h2 className="mb-3 text-base font-semibold" style={{ color: "var(--ig-text-primary)" }}>
-          Extension workflow
-        </h2>
-        <ol className="list-decimal space-y-2 pl-5 text-sm" style={{ color: "var(--ig-text-secondary)" }}>
+      <section className="motion-safe:animate-[rs-fade-in_0.6s_ease-out] rounded-[var(--radius-md)] border border-border bg-card p-5 shadow-none">
+        <h2 className="mb-3 text-base font-semibold text-foreground">Extension workflow</h2>
+        <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
           <li>Log in once in the ReturnSense extension popup (same account as this dashboard).</li>
           <li>Open an Instagram DM and use <strong>Analyze Buyer</strong> to capture the thread.</li>
           <li>Confirm phone and address, then run analysis before shipping COD.</li>
