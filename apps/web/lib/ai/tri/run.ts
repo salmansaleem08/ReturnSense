@@ -2,6 +2,7 @@ import type { AiStructuredResult } from "@/lib/ai/openrouter";
 import type { ChatMessage } from "@/lib/ai/openrouter";
 import { aggregateTriSignals } from "@/lib/ai/tri/aggregate";
 import { buildTriSharedContext, promptBehavior, promptCommitment, promptFraud } from "@/lib/ai/tri/prompts";
+import type { NetworkIgRow } from "@/lib/network/network-layer";
 
 const SYSTEM_JSON = `You output exactly one JSON object. No markdown fences. No keys except those requested.`;
 
@@ -72,11 +73,13 @@ export async function analyzeTriModel(
   messages: ChatMessage[],
   username: string,
   phoneProvided?: string | null,
-  addressProvided?: string | null
+  addressProvided?: string | null,
+  networkIg: NetworkIgRow | null = null,
+  distinctSellerCount: number | null = null
 ): Promise<AiStructuredResult> {
   const phone = phoneProvided?.trim()?.length ? phoneProvided.trim() : "Not provided";
   const address = addressProvided?.trim()?.length ? addressProvided.trim() : "Not provided";
-  const ctx = buildTriSharedContext(messages, username, phone, address);
+  const ctx = buildTriSharedContext(messages, username, phone, address, networkIg, distinctSellerCount);
 
   const mBehavior = process.env.RS_TRI_MODEL_BEHAVIOR?.trim() || "mistralai/mistral-small-3.1-24b-instruct:free";
   const mCommit = process.env.RS_TRI_MODEL_COMMITMENT?.trim() || "deepseek/deepseek-chat";
