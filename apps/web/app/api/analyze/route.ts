@@ -116,9 +116,25 @@ export const POST = withAuth(async ({ req, user }) => {
       error: null
     };
 
+    const addressNotProvided: AddressResult = {
+      address_found: false,
+      address_formatted: null,
+      address_lat: null,
+      address_lng: null,
+      address_city: null,
+      address_province: null,
+      address_country: null,
+      address_postal_code: null,
+      address_quality_score: 0,
+      address_precision: null,
+      address_types: [],
+      configured: true,
+      not_provided: true
+    };
+
     const [phoneResult, addressResult] = await Promise.all([
       phoneStr ? validatePhone(phoneStr) : Promise.resolve(phoneNotProvided),
-      validateAddress(addressStr || "")
+      addressStr ? validateAddress(addressStr) : Promise.resolve(addressNotProvided)
     ]);
 
     const aiResult = await analyzeWithGemini(messages, username);
@@ -135,7 +151,10 @@ export const POST = withAuth(async ({ req, user }) => {
         ? buyerPhoneDb(phoneResult as PhoneResult & { phone_valid: boolean })
         : {};
 
-    const addressDbPayload = addressResult?.configured === true ? buyerAddressDb(addressResult) : {};
+    const addressDbPayload =
+      addressResult?.configured === true && addressResult.not_provided !== true
+        ? buyerAddressDb(addressResult)
+        : {};
 
     const buyer = await saveBuyer({
       seller_id: user.id,

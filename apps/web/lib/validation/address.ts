@@ -12,6 +12,7 @@ export interface AddressResult {
   address_precision?: string | null;
   configured: boolean;
   error?: string;
+  not_provided?: boolean;
 }
 
 interface GeocodeResult {
@@ -142,6 +143,19 @@ export function computeAddressQuality(rawAddress: string, geocodeResult: Geocode
 export function getAddressRiskScore(addressResult?: AddressResult | null) {
   if (!addressResult || addressResult.configured !== true) {
     return { score: 0, signals: [] as Array<{ name: string; impact: number; description: string }> };
+  }
+
+  if (addressResult.not_provided === true) {
+    return {
+      score: 50,
+      signals: [
+        {
+          name: "address_not_provided",
+          impact: 0,
+          description: "No address was submitted — score is neutral"
+        }
+      ]
+    };
   }
 
   if (!addressResult.address_found) {
