@@ -49,7 +49,7 @@ export default function DashboardPage() {
   }, [supabase]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" style={{ color: "var(--ig-text-primary, #262626)" }}>
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {loading ? (
           <>
@@ -69,8 +69,17 @@ export default function DashboardPage() {
         )}
       </section>
 
-      <section className="rounded-[var(--radius-md)] border border-border bg-card p-5 shadow-none">
-        <h2 className="mb-4 text-base font-semibold text-foreground">Recent buyer analyses</h2>
+      <section
+        className="rounded-[8px] p-4"
+        style={{
+          background: "var(--ig-surface, #fff)",
+          border: "1px solid #DBDBDB",
+          boxShadow: "none"
+        }}
+      >
+        <h2 className="mb-4 text-sm font-semibold" style={{ color: "var(--ig-text-primary, #262626)" }}>
+          Recent buyer analyses
+        </h2>
         <Table>
           <TableHeader>
             <TableRow>

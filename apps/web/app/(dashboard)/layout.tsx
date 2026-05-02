@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
 
-import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { TopNav } from "@/components/TopNav";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getSupabasePublicKey, getSupabaseUrl } from "@/lib/supabase/config";
 
@@ -37,8 +37,9 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     .maybeSingle();
 
   return (
-    <DashboardShell email={user.email ?? "seller@returnsense.com"} plan={profile?.plan ?? "free"}>
-      {children}
-    </DashboardShell>
+    <div style={{ minHeight: "100vh", background: "var(--ig-bg, #FAFAFA)" }}>
+      <TopNav />
+      <main style={{ maxWidth: "935px", margin: "0 auto", padding: "30px 20px" }}>{children}</main>
+    </div>
   );
 }

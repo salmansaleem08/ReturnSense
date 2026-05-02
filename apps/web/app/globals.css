@@ -2,6 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Instagram-inspired dashboard tokens */
+:root {
+  --ig-white: #ffffff;
+  --ig-black: #000000;
+  --ig-bg: #fafafa;
+  --ig-surface: #ffffff;
+  --ig-border: #dbdbdb;
+  --ig-border-light: #efefef;
+  --ig-text-primary: #262626;
+  --ig-text-secondary: #737373;
+  --ig-text-muted: #8e8e8e;
+  --ig-blue: #0095f6;
+  --ig-blue-hover: #1877f2;
+  --ig-blue-light: #e8f4fd;
+  --ig-red: #ed4956;
+  --ig-green: #1d9a0b;
+  --ig-yellow: #d4a017;
+  --ig-orange: #e8490f;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-md: 16px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+  --border: 1px solid var(--ig-border);
+}
+
+html {
+  font-family: var(--font);
+}
+
 /* Signal LMS design tokens (ReturnSense) — light + .dark on html */
 @layer base {
   :root {
