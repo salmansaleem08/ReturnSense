@@ -21,7 +21,7 @@ import { validateAddress } from "@/lib/validation/address";
 import type { PhoneResult, PhoneValidationResult } from "@/lib/validation/phone";
 import { validatePhone } from "@/lib/validation/phone";
 import {
-  checkAttributionSanity,
+  computeAttributionQuality,
   logAttributionSummary,
   summarizeAttribution,
   type AnalyzedMessage
@@ -219,15 +219,9 @@ export const POST = withAuth(async ({ req, user }) => {
     }
 
     const analyzedForLog = toAnalyzedMessages(messages);
-    const sanity = checkAttributionSanity(analyzedForLog);
-    if (!sanity.ok) {
-      return Response.json(
-        { error: sanity.message, code: sanity.code, attribution: sanity.detail },
-        { status: 422, headers: corsHeaders }
-      );
-    }
     logAttributionSummary("RS-ATTRIB", analyzedForLog);
     const attribCounts = summarizeAttribution(analyzedForLog);
+    const attributionQuality = computeAttributionQuality(attribCounts);
 
     const messageCount = messages.length;
 
@@ -275,6 +269,12 @@ export const POST = withAuth(async ({ req, user }) => {
           ? rawCached.conflict_resolutions
           : [];
 
+      const cachedAttribQ = rawCached.attribution_quality as Record<string, unknown> | undefined;
+      const attributionUnreliableCached =
+        typeof rawCached.attribution_unreliable === "boolean"
+          ? rawCached.attribution_unreliable
+          : Boolean(cachedAttribQ?.unreliable === true);
+
       return Response.json(
         {
           buyer_id: cachedBuyer.id,
@@ -302,6 +302,8 @@ export const POST = withAuth(async ({ req, user }) => {
           signals,
           network_profile: networkProfileCached,
           signal_conflicts_resolved: conflictsCached,
+          attribution_unreliable: attributionUnreliableCached,
+          attribution_quality: cachedAttribQ ?? null,
           cached: true,
           dashboard_url: `${appBase}/dashboard/buyers/${cachedBuyer.id}`,
           disclaimer:
@@ -375,7 +377,8 @@ export const POST = withAuth(async ({ req, user }) => {
       phoneStr || null,
       addressStr || null,
       networkIg,
-      distinctSellerCount
+      distinctSellerCount,
+      attributionQuality.note_for_prompt || null
     );
 
     const { finalScore, riskLevel, signals } = computeFinalScore({
@@ -463,6 +466,8 @@ export const POST = withAuth(async ({ req, user }) => {
         seller_labeled: attribCounts.seller_labeled,
         uncertain: attribCounts.uncertain
       },
+      attribution_quality: attributionQuality,
+      attribution_unreliable: attributionQuality.unreliable,
       network_profile: networkProfile,
       ...(phoneResult.configured && phoneResult.not_provided !== true
         ? {
@@ -523,6 +528,8 @@ export const POST = withAuth(async ({ req, user }) => {
         signals,
         network_profile: networkProfile,
         signal_conflicts_resolved: conflicts,
+        attribution_unreliable: attributionQuality.unreliable,
+        attribution_quality: attributionQuality,
         cached: false,
         dashboard_url: `${appBase}/dashboard/buyers/${buyer.id}`,
         disclaimer:

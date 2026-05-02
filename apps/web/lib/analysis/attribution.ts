@@ -109,28 +109,67 @@ export function summarizeAttribution(messages: AnalyzedMessage[]): AttributionCo
   };
 }
 
-export type AttributionSanityResult =
-  | { ok: true }
-  | { ok: false; code: "ATTRIBUTION_ONE_SIDED"; message: string; detail: AttributionCounts };
+/** Server-side quality gate: analysis always runs; models get a warning when direction is untrustworthy. */
+export type AttributionQuality = {
+  degraded: boolean;
+  /** When true, extension/dashboard should warn that buyer vs seller labels may be wrong. */
+  unreliable: boolean;
+  reason: "one_side_missing" | "heavy_skew" | null;
+  /** Among high-confidence directional lines only: max(buyer,seller) / (buyer+seller). */
+  skew_ratio: number | null;
+  /** Injected into tri / single-model prompts when degraded. */
+  note_for_prompt: string;
+};
+
+const MIN_MESSAGES_LONG_CHAT = 5;
+const SKEW_SINGLE_SIDE_FRACTION = 0.8;
 
 /**
- * If the chat is long enough to expect a dialogue but we have zero high-confidence buyer
- * or seller lines, attribution is unreliable — block before any model call.
+ * When extension direction labels are one-sided or >80% skewed at high confidence, mark degraded
+ * and pass an explicit prompt warning — do not block the API (real chat data is still useful).
  */
-export function checkAttributionSanity(messages: AnalyzedMessage[]): AttributionSanityResult {
-  const detail = summarizeAttribution(messages);
-  const MIN_MESSAGES = 5;
-  if (detail.total < MIN_MESSAGES) return { ok: true };
-  if (detail.buyer_high === 0 || detail.seller_high === 0) {
-    return {
-      ok: false,
-      code: "ATTRIBUTION_ONE_SIDED",
-      message:
-        "Message attribution is unreliable for this chat: we could not confidently separate buyer and seller lines. Fix alignment in the extension or retry before running analysis.",
-      detail
-    };
+export function computeAttributionQuality(counts: AttributionCounts): AttributionQuality {
+  const total = counts.total;
+  const bh = counts.buyer_high;
+  const sh = counts.seller_high;
+  const highDir = bh + sh;
+
+  let degraded = false;
+  let unreliable = false;
+  let reason: AttributionQuality["reason"] = null;
+  let skew_ratio: number | null = null;
+
+  if (total >= MIN_MESSAGES_LONG_CHAT && (bh === 0 || sh === 0)) {
+    degraded = true;
+    unreliable = true;
+    reason = "one_side_missing";
   }
-  return { ok: true };
+
+  if (highDir >= MIN_MESSAGES_LONG_CHAT) {
+    const maxSide = Math.max(bh, sh);
+    skew_ratio = maxSide / highDir;
+    if (skew_ratio > SKEW_SINGLE_SIDE_FRACTION) {
+      degraded = true;
+      unreliable = true;
+      reason = reason ?? "heavy_skew";
+    }
+  }
+
+  let note_for_prompt = "";
+  if (degraded) {
+    if (reason === "one_side_missing") {
+      note_for_prompt =
+        "ATTRIBUTION WARNING: At high confidence, buyer and/or seller lines are missing on one side. " +
+        "Do not treat the confirmed buyer-only or seller-only blocks as ground truth. " +
+        "Use the uncertain / full context as weak signal; state conclusions cautiously.";
+    } else {
+      note_for_prompt =
+        "ATTRIBUTION WARNING: High-confidence labels are heavily skewed to one side (>80%). " +
+        "Message direction may be wrong. Rely on sequence and content, not role tags; avoid strong claims that depend on who said what.";
+    }
+  }
+
+  return { degraded, unreliable, reason, skew_ratio, note_for_prompt };
 }
 
 /** Chronological confirmed buyer lines only (no mixing with seller). */

@@ -56,7 +56,8 @@ export function buildAnalysisPrompt(
   username: string,
   phoneProvided?: string | null,
   addressProvided?: string | null,
-  networkBlock = ""
+  networkBlock = "",
+  attributionNote?: string | null
 ) {
   const analyzed: AnalyzedMessage[] = messages.map((m) => ({
     role: m.role,
@@ -80,7 +81,7 @@ export function buildAnalysisPrompt(
   const dateStr = "N/A";
   const net = networkBlock.trim() || "No cross-seller network summary provided for this request.";
 
-  return RS_ANALYST_V1_TEMPLATE.replace("{FULL_CONTEXT_TRANSCRIPT}", fullContextTranscript)
+  const body = RS_ANALYST_V1_TEMPLATE.replace("{FULL_CONTEXT_TRANSCRIPT}", fullContextTranscript)
     .replace("{BUYER_SCORING_TRANSCRIPT}", buyerScoringTranscript)
     .replace("{SELLER_CONFIRMED_TRANSCRIPT}", sellerConfirmed)
     .replace("{UNCERTAIN_TRANSCRIPT}", uncertainTranscript)
@@ -90,6 +91,11 @@ export function buildAnalysisPrompt(
     .replace("{ADDRESS_PROVIDED}", addressLine)
     .replace("{MESSAGE_COUNT}", messageCount)
     .replace("{DATE}", dateStr);
+  const warn = attributionNote?.trim();
+  if (warn) {
+    return `=== ATTRIBUTION / DIRECTION UNRELIABLE ===\n${warn}\n\n${body}`;
+  }
+  return body;
 }
 
 export async function analyzeWithOpenRouter(
@@ -98,12 +104,20 @@ export async function analyzeWithOpenRouter(
   phoneProvided?: string | null,
   addressProvided?: string | null,
   networkIg: NetworkIgRow | null = null,
-  distinctSellerCount: number | null = null
+  distinctSellerCount: number | null = null,
+  attributionNote?: string | null
 ): Promise<AiStructuredResult> {
   const networkBlock = formatNetworkProfileForPrompt(
     buildNetworkProfilePayload(networkIg, distinctSellerCount)
   );
-  const prompt = buildAnalysisPrompt(messages, username, phoneProvided, addressProvided, networkBlock);
+  const prompt = buildAnalysisPrompt(
+    messages,
+    username,
+    phoneProvided,
+    addressProvided,
+    networkBlock,
+    attributionNote
+  );
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {

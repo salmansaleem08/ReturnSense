@@ -90,6 +90,135 @@ function igRowLooksLikeIncomingBuyer(rowOrEl) {
   return false;
 }
 
+/** Instagram obfuscated class tokens — refresh when DM shell redeploys (batch class renames). */
+const IG_CLASS_SELLER_MARKERS = new Set(["x13a6bvl", "x15zctf7"]);
+const IG_CLASS_BUYER_MARKERS = new Set(["x1g0dm76", "x16ye13r"]);
+const IG_SELLER_TEXT_SPAN_CLASS = "x1gslohp";
+
+function igCollectClassTokensFromRowChain(rowOrEl, maxAncestors) {
+  const tokens = new Set();
+  let node =
+    typeof rowOrEl.closest === "function" ? rowOrEl.closest('[role="row"]') : null;
+  if (!node) node = rowOrEl;
+  for (let d = 0; d <= maxAncestors && node; d++) {
+    const cn = node.className;
+    if (typeof cn === "string") {
+      cn.split(/\s+/).forEach((t) => {
+        if (t) tokens.add(t);
+      });
+    } else if (node.classList && typeof node.classList.forEach === "function") {
+      node.classList.forEach((t) => tokens.add(t));
+    }
+    node = node.parentElement;
+  }
+  return tokens;
+}
+
+function igLayer1ClassFingerprint(el) {
+  try {
+    const row = typeof el.closest === "function" ? el.closest('[role="row"]') : null;
+    if (!row) return null;
+    const tokens = igCollectClassTokensFromRowChain(row, 5);
+    let sellerHits = 0;
+    let buyerHits = 0;
+    tokens.forEach((t) => {
+      if (IG_CLASS_SELLER_MARKERS.has(t)) sellerHits++;
+      if (IG_CLASS_BUYER_MARKERS.has(t)) buyerHits++;
+    });
+    const spanSeller =
+      typeof row.querySelector === "function"
+        ? row.querySelector(`span.${IG_SELLER_TEXT_SPAN_CLASS}`)
+        : null;
+    if (spanSeller) sellerHits += 2;
+
+    if (sellerHits > 0 && buyerHits === 0) {
+      return { role: "seller", layoutSource: "ig-layer1-class", confidence: 0.93 };
+    }
+    if (buyerHits > 0 && sellerHits === 0) {
+      return { role: "buyer", layoutSource: "ig-layer1-class", confidence: 0.93 };
+    }
+    if (sellerHits > buyerHits + 1) {
+      return { role: "seller", layoutSource: "ig-layer1-class-skew", confidence: 0.85 };
+    }
+    if (buyerHits > sellerHits + 1) {
+      return { role: "buyer", layoutSource: "ig-layer1-class-skew", confidence: 0.85 };
+    }
+  } catch (_e) {
+    /* ignore */
+  }
+  return null;
+}
+
+function igLayer2SpacerSignal(el) {
+  try {
+    const row = typeof el.closest === "function" ? el.closest('[role="row"]') : null;
+    if (!row || typeof row.querySelectorAll !== "function") return null;
+    const spacers = row.querySelectorAll('[style*="--x-width"]');
+    if (!spacers.length) return null;
+    const bubbleRect = rsPickMessageBubbleRect(el);
+    if (!bubbleRect || bubbleRect.width < 2) return null;
+    const first = spacers[0];
+    const fr = first.getBoundingClientRect?.();
+    if (!fr || fr.width < 1) return null;
+    let spacerBefore = false;
+    let spacerAfter = false;
+    const midX = bubbleRect.left + bubbleRect.width / 2;
+    for (let i = 0; i < spacers.length; i++) {
+      const r = spacers[i].getBoundingClientRect?.();
+      if (!r) continue;
+      const sx = r.left + r.width / 2;
+      if (sx < midX - 8) spacerBefore = true;
+      if (sx > midX + 8) spacerAfter = true;
+    }
+    if (fr.right <= bubbleRect.left + 14) {
+      return { role: "buyer", layoutSource: "ig-layer2-spacer-before", confidence: 0.82 };
+    }
+    if (fr.left >= bubbleRect.right - 14) {
+      return { role: "seller", layoutSource: "ig-layer2-spacer-after", confidence: 0.82 };
+    }
+    if (spacerBefore && !spacerAfter) {
+      return { role: "buyer", layoutSource: "ig-layer2-spacer-cluster", confidence: 0.78 };
+    }
+    if (spacerAfter && !spacerBefore) {
+      return { role: "seller", layoutSource: "ig-layer2-spacer-cluster", confidence: 0.78 };
+    }
+  } catch (_e) {
+    /* ignore */
+  }
+  return null;
+}
+
+function igLayer3AvatarIncoming(el) {
+  try {
+    const row = typeof el.closest === "function" ? el.closest('[role="row"]') : null;
+    if (!row) return null;
+    const bubbleRect = rsPickMessageBubbleRect(el);
+    const refLeft = bubbleRect ? bubbleRect.left : null;
+    const imgs = row.querySelectorAll("img");
+    for (let i = 0; i < imgs.length; i++) {
+      const img = imgs[i];
+      const r = img.getBoundingClientRect?.();
+      if (!r || r.width < 22 || r.width > 58 || r.height < 22 || r.height > 58) continue;
+      if (refLeft != null && r.right <= refLeft + 28 && r.left < refLeft) {
+        return { role: "buyer", layoutSource: "ig-layer3-avatar-img", confidence: 0.9 };
+      }
+    }
+    const divs = row.querySelectorAll("div");
+    for (let j = 0; j < divs.length; j++) {
+      const d = divs[j];
+      const r = d.getBoundingClientRect?.();
+      if (!r || r.width < 26 || r.width > 54 || r.height < 26 || r.height > 54) continue;
+      if (Math.abs(r.width - r.height) > 8) continue;
+      if (refLeft != null && r.right <= refLeft + 22 && r.left < refLeft - 2) {
+        return { role: "buyer", layoutSource: "ig-layer3-avatar-slot", confidence: 0.86 };
+      }
+    }
+  } catch (_e) {
+    /* ignore */
+  }
+  return null;
+}
+
 function rsPickMessageBubbleRect(messageEl) {
   try {
     /** @type {Element[]} */
@@ -176,9 +305,11 @@ function harvestVisibleMessages() {
 
       /**
        * Instagram Web DM attribution order:
-       * 1) Incoming messages: interactive bubble wrapper uses role="button" (see IG DOM).
-       * 2) Else geometry vs [role=main] midline (seller ≈ outgoing side).
-       * 3) Else flex / viewport fallbacks.
+       * 1) Obfuscated class fingerprints + seller text span (stable across flex quirks).
+       * 2) Row spacers using --x-width (before bubble → buyer / after → seller).
+       * 3) Avatar slot / image left of bubble → incoming (buyer).
+       * 4) role="button" large wrappers on incoming bubbles.
+       * 5) Thread geometry vs [role=main], then flex, then viewport.
        */
       let flexEndDepth = -1;
       let flexStartDepth = -1;
@@ -205,10 +336,21 @@ function harvestVisibleMessages() {
 
       const bubbleRect = rsPickMessageBubbleRect(el);
 
+      const early =
+        igLayer1ClassFingerprint(el) ||
+        igLayer2SpacerSignal(el) ||
+        igLayer3AvatarIncoming(el);
+
       let role = "unknown";
       let layoutSource = "none";
+      /** @type {number | null} */
+      let presetConfidence = null;
 
-      if (igRowLooksLikeIncomingBuyer(el)) {
+      if (early) {
+        role = early.role;
+        layoutSource = early.layoutSource;
+        presetConfidence = early.confidence;
+      } else if (igRowLooksLikeIncomingBuyer(el)) {
         role = "buyer";
         layoutSource = "ig-incoming-role-button";
       }
@@ -275,7 +417,10 @@ function harvestVisibleMessages() {
       /** @type {string[]} */
       const attribution_signals = [];
       let attribution_confidence = 0.41;
-      if (layoutSource === "ig-incoming-role-button") {
+      if (presetConfidence != null) {
+        attribution_confidence = presetConfidence;
+        attribution_signals.push(layoutSource);
+      } else if (layoutSource === "ig-incoming-role-button") {
         attribution_confidence = 0.91;
         attribution_signals.push("ig-incoming-role-button");
       } else if (layoutSource === "geometry-thread" || layoutSource === "geometry-thread-rtl") {
@@ -1103,6 +1248,30 @@ async function submitForAnalysis({ messages, username, phone, address }) {
 /**
  * @param {Record<string, unknown>} result
  */
+function renderAttributionWarningBanner(result) {
+  if (result?.attribution_unreliable !== true) return "";
+  const q = result?.attribution_quality;
+  let detail =
+    "We could not reliably tell your messages from the buyer's. Treat the score as less precise.";
+  if (q && typeof q === "object") {
+    const reason = String(q.reason ?? "");
+    if (reason === "heavy_skew") {
+      detail =
+        "Almost all lines were labeled as one side. Instagram layout may have skewed direction — use judgment.";
+    } else if (reason === "one_side_missing") {
+      detail =
+        "High-confidence labels are missing for one side (buyer or seller). Direction may be wrong.";
+    }
+  }
+  return `<div class="rs-attrib-warning" role="alert" style="margin-bottom:12px;padding:12px 14px;border-radius:10px;background:#FFFBEB;border:1px solid #F59E0B;color:#78350F;font-size:13px;line-height:1.45;">
+    <div style="font-weight:700;margin-bottom:4px;">Message direction unreliable</div>
+    <div style="font-size:12px;opacity:0.95;">${escapeHtml(detail)}</div>
+  </div>`;
+}
+
+/**
+ * @param {Record<string, unknown>} result
+ */
 function renderNetworkProfileBanner(result) {
   const np = result?.network_profile;
   if (!np || typeof np !== "object") {
@@ -1163,6 +1332,7 @@ function displayResult(result) {
   const body = document.getElementById("rs-panel-body");
   if (!body) return;
 
+  const attributionWarnHtml = renderAttributionWarningBanner(result);
   const networkBannerHtml = renderNetworkProfileBanner(result);
   const conflictCardHtml = renderConflictResolutionCard(result);
 
@@ -1388,6 +1558,7 @@ function displayResult(result) {
   const privacyFooter = `<div style="font-size:10px;color:#9CA3AF;text-align:center;padding:10px 4px 2px;line-height:1.45;border-top:1px solid #EFEFEF;margin-top:10px;">Conversation text is not stored. Only derived risk signals. Scores are advisory—you decide whether to ship. <a href="${API_BASE}/privacy" target="_blank" rel="noopener noreferrer" style="color:#6B7280;">Privacy policy</a></div>`;
 
   body.innerHTML = `
+    ${attributionWarnHtml}
     ${networkBannerHtml}
     <div class="rs-card">
       <div class="rs-card-body">

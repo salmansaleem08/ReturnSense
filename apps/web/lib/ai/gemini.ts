@@ -133,7 +133,8 @@ export async function analyzeWithGemini(
   phoneProvided?: string | null,
   addressProvided?: string | null,
   networkIg: NetworkIgRow | null = null,
-  distinctSellerCount: number | null = null
+  distinctSellerCount: number | null = null,
+  attributionNote?: string | null
 ): Promise<AiStructuredResult> {
   if (triEngineEnabled()) {
     try {
@@ -143,7 +144,8 @@ export async function analyzeWithGemini(
         phoneProvided,
         addressProvided,
         networkIg,
-        distinctSellerCount
+        distinctSellerCount,
+        attributionNote
       );
     } catch (triErr) {
       console.warn("[RS] Tri-model engine failed — falling back to single LLM path:", triErr);
@@ -157,7 +159,8 @@ export async function analyzeWithGemini(
       phoneProvided,
       addressProvided,
       networkIg,
-      distinctSellerCount
+      distinctSellerCount,
+      attributionNote
     );
   }
 
@@ -165,7 +168,14 @@ export async function analyzeWithGemini(
   const networkBlock = formatNetworkProfileForPrompt(
     buildNetworkProfilePayload(networkIg, distinctSellerCount)
   );
-  const prompt = buildAnalysisPrompt(messages, username, phoneProvided, addressProvided, networkBlock);
+  const prompt = buildAnalysisPrompt(
+    messages,
+    username,
+    phoneProvided,
+    addressProvided,
+    networkBlock,
+    attributionNote
+  );
 
   try {
     let result: GenerateContentResult;
@@ -186,7 +196,8 @@ export async function analyzeWithGemini(
           phoneProvided,
           addressProvided,
           networkIg,
-          distinctSellerCount
+          distinctSellerCount,
+          attributionNote
         );
       }
       throw genErr;
@@ -200,7 +211,8 @@ export async function analyzeWithGemini(
         phoneProvided,
         addressProvided,
         networkIg,
-        distinctSellerCount
+        distinctSellerCount,
+        attributionNote
       );
     }
 
@@ -214,7 +226,8 @@ export async function analyzeWithGemini(
         phoneProvided,
         addressProvided,
         networkIg,
-        distinctSellerCount
+        distinctSellerCount,
+        attributionNote
       );
     }
     return mapParsedToAiResult(parsed);
@@ -226,7 +239,8 @@ export async function analyzeWithGemini(
       phoneProvided,
       addressProvided,
       networkIg,
-      distinctSellerCount
+      distinctSellerCount,
+      attributionNote
     );
   }
 }

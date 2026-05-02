@@ -75,11 +75,20 @@ export async function analyzeTriModel(
   phoneProvided?: string | null,
   addressProvided?: string | null,
   networkIg: NetworkIgRow | null = null,
-  distinctSellerCount: number | null = null
+  distinctSellerCount: number | null = null,
+  attributionNote?: string | null
 ): Promise<AiStructuredResult> {
   const phone = phoneProvided?.trim()?.length ? phoneProvided.trim() : "Not provided";
   const address = addressProvided?.trim()?.length ? addressProvided.trim() : "Not provided";
-  const ctx = buildTriSharedContext(messages, username, phone, address, networkIg, distinctSellerCount);
+  const ctx = buildTriSharedContext(
+    messages,
+    username,
+    phone,
+    address,
+    networkIg,
+    distinctSellerCount,
+    attributionNote ?? ""
+  );
 
   const mBehavior = process.env.RS_TRI_MODEL_BEHAVIOR?.trim() || "mistralai/mistral-small-3.1-24b-instruct:free";
   const mCommit = process.env.RS_TRI_MODEL_COMMITMENT?.trim() || "deepseek/deepseek-chat";

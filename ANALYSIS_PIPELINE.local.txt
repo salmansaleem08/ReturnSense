@@ -13,31 +13,32 @@ LOGO
 OVERVIEW
 --------
 1. Extension collects DM messages (scroll-capture or visible), assigns role + attribution_confidence per line, POSTs to /api/analyze.
-2. API: auth → attribution sanity (422 if unreliable) → cache by conversation_hash → validators → tri or single-model AI → computeFinalScore (weights + network ceiling) → synthesis LLM → save buyer + signals → JSON.
+2. API: auth → attribution quality (computeAttributionQuality — never 422 for skew; degraded flags + prompt warning) → cache by conversation_hash → validators → tri or single-model AI → computeFinalScore (weights + network ceiling) → synthesis LLM → save buyer + signals → JSON.
 3. GET /api/stats: risk_trend_7d — last 7 calendar days, per day: avg_trust (null if no analyses), high_risk_count (high+critical), analyses_count.
 
 EXTENSION ATTRIBUTION (extension/content.js — harvestVisibleMessages)
 -----------------------------------------------------------------------
-• First: if `[role="row"]` contains a sufficiently large `role="button"` wrapper (Instagram incoming /
-  counterparty bubble), classify as **buyer** (`ig-incoming-role-button`).
-• Then: compare message bubble center X to the center of `[role=main]` (the DM column), not
-  `window.innerWidth/2` (Instagram’s thread is a narrow column; viewport mid misclassifies everything).
-• Bubble box: `rsPickMessageBubbleRect` — widest `div[dir=auto]` in the row (full-width row rects are ignored).
-• LTR: center right of thread mid → seller (you); left → buyer. RTL: mirrored.
-• Flex (justify-content end/start) is secondary: flex-start-only never implies buyer (column flex-start
-  affected all rows). flex-end-only can still mark seller; both axes → deepest wins if geometry failed.
-• Last resort: viewport-centered geometry. Confidence ~0.88 thread geometry, ~0.62 viewport, ~0.82 flex-only.
+• Layer 1 — Class fingerprints: collect classes on the row + ancestors (see IG_CLASS_* constants); seller
+  span text uses `span.x1gslohp`; skew scores break ties.
+• Layer 2 — Spacers: `[style*="--x-width"]` before the bubble → buyer; after → seller (cluster fallback).
+• Layer 3 — Avatar: small square img or div left of bubble → buyer (incoming).
+• Then: large `role="button"` wrapper → buyer (`ig-incoming-role-button`).
+• Then: bubble center X vs `[role=main]` midline (not viewport mid); `rsPickMessageBubbleRect` = widest
+  `div[dir=auto]`. LTR / RTL rules as before.
+• Flex (justify-content end/start), then viewport fallback. Confidence tiers match layoutSource.
 
 SERVER ATTRIBUTION (apps/web/lib/analysis/attribution.ts)
 ---------------------------------------------------------
 • ATTRIBUTION_HIGH = 0.72, ATTRIBUTION_LOW = 0.55.
 • Confirmed buyer transcript = buyer role + confidence ≥ 0.72; same for seller.
 • Medium band 0.55–0.72 → uncertain background only; below 0.55 → unattributed metadata.
-• checkAttributionSanity: if total ≥ 5 messages and (buyer_high === 0 OR seller_high === 0) → 422 ATTRIBUTION_ONE_SIDED.
+• computeAttributionQuality: if total ≥ 5 and (buyer_high === 0 OR seller_high === 0), OR among high-conf
+  directional lines max/total > 0.8 → attribution_unreliable + note_for_prompt (analysis still runs).
 
 TRI ENGINE (OPENROUTER_API_KEY set, RS_USE_TRI_ENGINE !== "false")
 ------------------------------------------------------------------
-• apps/web/lib/ai/tri/run.ts — three parallel OpenRouter JSON calls with buildTriSharedContext:
+• apps/web/lib/ai/tri/run.ts — three parallel OpenRouter JSON calls with buildTriSharedContext (optional
+  attributionNote when server marks degraded).
   - Network block from formatNetworkProfileForPrompt(buildNetworkProfilePayload(network_ig, distinct_sellers)).
   - Confirmed buyer, confirmed seller, uncertain transcripts only (no mixed primary blob).
 • Models: RS_TRI_MODEL_BEHAVIOR, RS_TRI_MODEL_COMMITMENT, RS_TRI_MODEL_FRAUD (env defaults in run.ts).
@@ -65,8 +66,8 @@ NETWORK (apps/web/lib/network/network-layer.ts)
 
 API ROUTE (apps/web/app/api/analyze/route.ts)
 ---------------------------------------------
-• checkAttributionSanity before AI; 422 with error, code, attribution counts.
-• Merged ai_raw: attribution_summary (high/medium/unattributed), network_profile, conflict_resolutions, synthesis.
+• No 422 for one-sided attribution; attribution_quality + attribution_unreliable on JSON and in merged ai_raw.
+• Merged ai_raw: attribution_summary, attribution_quality, network_profile, conflict_resolutions, synthesis.
 
 KEY FILES
 ---------

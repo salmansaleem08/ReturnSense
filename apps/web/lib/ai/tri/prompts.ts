@@ -31,6 +31,8 @@ export type TriSharedContext = {
   phone: string;
   address: string;
   messageCount: string;
+  /** Shown at top of every tri prompt when server detected unreliable direction labels. */
+  attributionNote: string;
 };
 
 export function buildTriSharedContext(
@@ -39,7 +41,8 @@ export function buildTriSharedContext(
   phone: string,
   address: string,
   networkRow: NetworkIgRow | null,
-  distinctSellerCount: number | null
+  distinctSellerCount: number | null,
+  attributionNote = ""
 ): TriSharedContext {
   const a = toAnalyzed(messages);
   const networkPayload = buildNetworkProfilePayload(networkRow, distinctSellerCount);
@@ -54,12 +57,17 @@ export function buildTriSharedContext(
     username,
     phone,
     address,
-    messageCount: String(messages.length)
+    messageCount: String(messages.length),
+    attributionNote: attributionNote.trim()
   };
 }
 
 function transcriptHeader(ctx: TriSharedContext): string {
-  return `${ctx.networkBlock}
+  const warn =
+    ctx.attributionNote.length > 0
+      ? `\n=== ATTRIBUTION / DIRECTION UNRELIABLE ===\n${ctx.attributionNote}\n`
+      : "";
+  return `${warn}${ctx.networkBlock}
 
 Instagram handle (seller view): ${ctx.username}
 Phone field (seller tool): ${ctx.phone}
