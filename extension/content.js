@@ -98,10 +98,18 @@ function harvestVisibleMessages() {
       if (!text || text.length < 2) continue;
       if (skipPatterns.some((p) => p.test(text))) continue;
 
+      /**
+       * Instagram aligns “you” (seller) with flex-end and the counterparty with flex-start on a row.
+       * Do NOT treat justify-content: normal as buyer — many wrappers use “normal”, so the first hit
+       * was always buyer and every line looked like the buyer (422 ATTRIBUTION_ONE_SIDED).
+       */
       let role = "unknown";
       let layoutSource = "none";
+      /** Deepest ancestor index (most specific row wrapper) where we saw each alignment */
+      let flexEndDepth = -1;
+      let flexStartDepth = -1;
       let ancestor = el;
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < 28; i++) {
         ancestor = ancestor?.parentElement ?? null;
         if (!ancestor) break;
         let style = null;
@@ -110,27 +118,41 @@ function harvestVisibleMessages() {
         } catch (_e) {
           style = null;
         }
-        const jc = style?.justifyContent ?? "";
-        if (jc === "flex-end") {
-          role = "seller";
-          layoutSource = "flex-end";
-          break;
+        const jc = String(style?.justifyContent ?? "")
+          .toLowerCase()
+          .trim();
+        if (jc === "flex-end" || jc === "end") {
+          flexEndDepth = i;
         }
-        if (jc === "flex-start" || jc === "normal") {
-          role = "buyer";
-          layoutSource = "flex-start";
-          break;
+        if (jc === "flex-start" || jc === "start") {
+          flexStartDepth = i;
         }
+      }
+
+      if (flexEndDepth >= 0 && flexStartDepth >= 0) {
+        if (flexEndDepth === flexStartDepth) {
+          role = "unknown";
+          layoutSource = "layout-tie";
+        } else {
+          role = flexEndDepth > flexStartDepth ? "seller" : "buyer";
+          layoutSource = role === "seller" ? "flex-end" : "flex-start";
+        }
+      } else if (flexEndDepth >= 0) {
+        role = "seller";
+        layoutSource = "flex-end";
+      } else if (flexStartDepth >= 0) {
+        role = "buyer";
+        layoutSource = "flex-start";
       }
 
       if (role === "unknown") {
         try {
           const rect = el.getBoundingClientRect?.();
           const viewMid = window.innerWidth / 2;
-          if (rect && rect.left + rect.width / 2 > viewMid + 60) {
+          if (rect && rect.left + rect.width / 2 > viewMid + 40) {
             role = "seller";
             layoutSource = "geometry-right";
-          } else if (rect && rect.left + rect.width / 2 < viewMid - 60) {
+          } else if (rect && rect.left + rect.width / 2 < viewMid - 40) {
             role = "buyer";
             layoutSource = "geometry-left";
           }
@@ -143,8 +165,14 @@ function harvestVisibleMessages() {
       const attribution_signals = [];
       let attribution_confidence = 0.41;
       if (layoutSource === "flex-end" || layoutSource === "flex-start") {
-        attribution_confidence = 0.9;
+        attribution_confidence =
+          flexEndDepth >= 0 && flexStartDepth >= 0 ? 0.78 : 0.9;
         attribution_signals.push(`layout:${layoutSource}`);
+        if (flexEndDepth >= 0) attribution_signals.push(`flex-end@d${flexEndDepth}`);
+        if (flexStartDepth >= 0) attribution_signals.push(`flex-start@d${flexStartDepth}`);
+      } else if (layoutSource === "layout-tie") {
+        attribution_confidence = 0.5;
+        attribution_signals.push("layout-tie");
       } else if (layoutSource === "geometry-right" || layoutSource === "geometry-left") {
         attribution_confidence = 0.64;
         attribution_signals.push(layoutSource);

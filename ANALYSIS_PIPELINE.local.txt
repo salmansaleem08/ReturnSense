@@ -1,0 +1,101 @@
+ReturnSense — Analysis pipeline (reference; matches repo code as of last update)
+================================================================================
+
+================================================================================
+SECTION A — PIPELINE AS IMPLEMENTED IN CODE
+================================================================================
+
+OVERVIEW
+--------
+1. Extension collects DM messages (scroll-capture or visible), assigns role + attribution_confidence per line, POSTs to /api/analyze.
+2. API: auth → attribution sanity (422 if unreliable) → cache by conversation_hash → validators → tri or single-model AI → computeFinalScore (weights + network ceiling) → synthesis LLM → save buyer + signals → JSON.
+
+EXTENSION ATTRIBUTION (extension/content.js — harvestVisibleMessages)
+-----------------------------------------------------------------------
+• Each bubble: walk up to 28 ancestors; read computed justify-content (lowercased).
+• flex-end / end → track deepest depth seen (seller / “you” row).
+• flex-start / start → track deepest depth seen (buyer / counterparty row).
+• If both exist: deeper depth wins (avoids shallow column flex-start beating bubble flex-end).
+• If depths tie → unknown, then geometry fallback (bubble center vs viewport mid).
+• Never treats justify-content: normal as buyer (that caused all lines to classify as buyer).
+• Sends attribution_confidence 0.9 (single alignment), 0.78 (both axes seen), 0.64 (geometry), 0.41 (unknown).
+
+SERVER ATTRIBUTION (apps/web/lib/analysis/attribution.ts)
+---------------------------------------------------------
+• ATTRIBUTION_HIGH = 0.72, ATTRIBUTION_LOW = 0.55.
+• Confirmed buyer transcript = buyer role + confidence ≥ 0.72; same for seller.
+• Medium band 0.55–0.72 → uncertain background only; below 0.55 → unattributed metadata.
+• checkAttributionSanity: if total ≥ 5 messages and (buyer_high === 0 OR seller_high === 0) → 422 ATTRIBUTION_ONE_SIDED.
+
+TRI ENGINE (OPENROUTER_API_KEY set, RS_USE_TRI_ENGINE !== "false")
+------------------------------------------------------------------
+• apps/web/lib/ai/tri/run.ts — three parallel OpenRouter JSON calls with buildTriSharedContext:
+  - Network block from formatNetworkProfileForPrompt(buildNetworkProfilePayload(network_ig, distinct_sellers)).
+  - Confirmed buyer, confirmed seller, uncertain transcripts only (no mixed primary blob).
+• Models: RS_TRI_MODEL_BEHAVIOR, RS_TRI_MODEL_COMMITMENT, RS_TRI_MODEL_FRAUD (env defaults in run.ts).
+• aggregateTriSignals: commitment depth, fraud pattern strengths 0–3, combination risk, hard stops; conflict-resolution.ts CR-1..CR-3 (seller-safe).
+• analyst_notes from models cleared before synthesis; aggregate sets empty notes.
+
+SYNTHESIS (Improvement Eight)
+-----------------------------
+• apps/web/lib/ai/tri/synthesize.ts after computeFinalScore: OpenRouter JSON → analyst_notes + recommendation.
+• Optional RS_TRI_MODEL_SYNTHESIS.
+
+FALLBACK AI (Gemini or OpenRouter single-model)
+-----------------------------------------------
+• apps/web/lib/ai/gemini.ts, openrouter.ts, rs-analyst-v1.ts — same split transcripts + {NETWORK_BLOCK} in template.
+
+SCORING (apps/web/lib/risk/score-engine.ts)
+-------------------------------------------
+• Dynamic weights: if seller historicalData.length ≥ 3 → higher history weight; Pakistan phone_country bumps phone slice; weak phone bumps address; strong phone + geocoded address slightly reduces address weight; normalize to sum 1.
+• computeNetworkScoreCeiling(networkIgRow): structural cap when cross-seller fake outcomes pass thresholds.
+
+NETWORK (apps/web/lib/network/network-layer.ts)
+-----------------------------------------------
+• getNetworkIgStats, getDistinctSellerCountForIg, buildNetworkProfilePayload, computeNetworkTrustLabel/Score.
+• API returns network_profile; extension renders banner first; DB raw may include signal_conflicts_resolved.
+
+API ROUTE (apps/web/app/api/analyze/route.ts)
+---------------------------------------------
+• checkAttributionSanity before AI; 422 with error, code, attribution counts.
+• Merged ai_raw: attribution_summary (high/medium/unattributed), network_profile, conflict_resolutions, synthesis.
+
+KEY FILES
+---------
+• apps/web/app/api/analyze/route.ts
+• apps/web/lib/ai/tri/{run.ts,prompts.ts,aggregate.ts,conflict-resolution.ts,synthesize.ts}
+• apps/web/lib/ai/{gemini.ts,openrouter.ts,rs-analyst-v1.ts}
+• apps/web/lib/analysis/attribution.ts
+• apps/web/lib/network/network-layer.ts
+• apps/web/lib/risk/score-engine.ts
+• extension/content.js, extension/styles.css
+
+ENV (names only)
+----------------
+OPENROUTER_API_KEY, RS_USE_TRI_ENGINE, RS_TRI_MODEL_*, RS_TRI_MODEL_SYNTHESIS, GEMINI_*, NEXT_PUBLIC_APP_URL, VERCEL_URL, validator keys.
+
+
+================================================================================
+SECTION B — REMAINING GAPS / FUTURE WORK
+================================================================================
+
+• Improvement Seven: signal_weight_stats / getSignalWeightMap exists; no dashboard surfacing “which predictors correlated with outcomes” for manual tuning beyond multipliers.
+• Deduplication in extension still keys only on exact text (duplicate lines may collapse).
+• Cached analysis rows do not re-run synthesis if prompts change (hash-based cache).
+
+
+================================================================================
+SECTION C — IMPROVEMENT CHECKLIST (IMPLEMENTED IN CODE)
+================================================================================
+
+[x] Improvement One: split buyer/seller/uncertain transcripts; high/medium/low tiers; 422 sanity gate; extension layout fix for flex + deepest-wins
+[x] Improvement Two: behavioral prompt — sequence, Roman Urdu examples, product inference, key quote/absence, network weight note
+[x] Improvement Three: commitment depth schema + aggregate mapping
+[x] Improvement Four: fraud strengths 0–3, combination risk, PK pattern names in prompt
+[x] Improvement Five: network in all tri prompts; computeNetworkScoreCeiling; extension top banner
+[x] Improvement Six: conflict-resolution.ts + conflict_resolutions + extension card + API field
+[x] Improvement Seven: regional/history weight rules in score-engine (not full observability UI)
+[x] Improvement Eight: synthesizeAnalystNarrative after final score
+[x] Improvement Nine: network profile banner styling by trust_severity
+
+END OF FILE
