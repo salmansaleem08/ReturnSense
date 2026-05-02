@@ -1,3 +1,4 @@
+import type { NetworkIgRow } from "@/lib/network/network-layer";
 import type { AddressResult } from "@/lib/validation/address";
 import { getAddressRiskScore } from "@/lib/validation/address";
 import type { PhoneResult } from "@/lib/validation/phone";
@@ -16,8 +17,8 @@ interface ScoreInput {
   chatMessages?: Array<{ role: string; text: string }>;
   /** High-confidence buyer lines only — excludes uncertain/seller from behavioral sampling thresholds. */
   buyerScoringCount?: number;
-  /** Cross-seller hashed IG aggregates — advisory cap only. */
-  networkIgFakeCount?: number;
+  /** Full network row for structural ceiling + ratios. */
+  networkIgRow?: NetworkIgRow | null;
   /** Per-signal multiplier after MIN observations (learning layer); absent keys default to 1. */
   signalWeightMap?: Record<string, number>;
 }
@@ -68,6 +69,35 @@ function wmap(name: string, m?: Record<string, number>): number {
   return typeof v === "number" && v > 0 ? v : 1;
 }
 
+function isPakistanNumber(phoneResult: unknown): boolean {
+  const p = phoneResult as PhoneResult | null | undefined;
+  if (!p?.phone_country) return false;
+  const c = String(p.phone_country).toLowerCase();
+  return c.includes("pakistan") || c === "pk";
+}
+
+function phoneIsStrongIdentifier(phoneResult: unknown): boolean {
+  const p = phoneResult as PhoneResult | null | undefined;
+  if (!p || p.configured !== true || p.not_provided === true) return false;
+  return p.phone_valid === true && p.phone_is_voip !== true;
+}
+
+/**
+ * Hard ceiling from verified cross-seller fake outcomes — overrides rosy chat (Improvement Five).
+ * Documented caps: multiple fakes cap very low; single fake with bad ratio caps mid-low.
+ */
+export function computeNetworkScoreCeiling(row: NetworkIgRow | null | undefined): number | null {
+  if (!row) return null;
+  const f = Number(row.fake_count) || 0;
+  const t = Number(row.total_marked) || 0;
+  if (f <= 0) return null;
+  if (f >= 3) return 8;
+  if (f >= 2) return 12;
+  if (t >= 3 && f / t >= 0.25) return 18;
+  if (f === 1) return 34;
+  return null;
+}
+
 export function computeFinalScore({
   aiResult,
   phoneResult,
@@ -75,15 +105,50 @@ export function computeFinalScore({
   historicalData,
   chatMessages,
   buyerScoringCount,
-  networkIgFakeCount,
+  networkIgRow,
   signalWeightMap
 }: ScoreInput) {
   const signals: Signal[] = [];
-  let weightedScore = 0;
   const wm = signalWeightMap;
 
+  const histN = historicalData?.length ?? 0;
+  let aiW = 0.45;
+  let phoneW = 0.15;
+  let addrW = 0.2;
+  let histW = 0.2;
+
+  if (histN >= 3) {
+    aiW = 0.33;
+    histW = 0.34;
+    phoneW = 0.165;
+    addrW = 0.195;
+  }
+
+  if (isPakistanNumber(phoneResult)) {
+    phoneW += 0.05;
+    aiW -= 0.05;
+  }
+
+  if (!phoneIsStrongIdentifier(phoneResult)) {
+    addrW += 0.06;
+    aiW -= 0.06;
+  } else {
+    const a = addressResult as AddressResult | null | undefined;
+    if (a?.configured === true && a.not_provided !== true && a.address_found === true) {
+      const addrBefore = addrW;
+      addrW *= 0.88;
+      aiW += addrBefore * 0.12;
+    }
+  }
+
+  const wSum = aiW + phoneW + addrW + histW;
+  aiW /= wSum;
+  phoneW /= wSum;
+  addrW /= wSum;
+  histW /= wSum;
+
   const aiScore = aiResult?.ai_trust_score ?? 50;
-  weightedScore += aiScore * 0.45;
+  let weightedScore = aiScore * aiW;
   (aiResult?.negative_signals || []).forEach((s) => {
     const base = -8;
     const impact = Math.round(base * wmap(s, wm));
@@ -156,7 +221,7 @@ export function computeFinalScore({
 
   const { score: phoneRisk, signals: phoneSigs } = getPhoneRiskScoreOrNeutral(phoneResult);
   const phoneScore = Math.max(0, 100 - phoneRisk);
-  weightedScore += phoneScore * 0.15;
+  weightedScore += phoneScore * phoneW;
   signals.push(
     ...phoneSigs.map((s) => ({
       signal_type: "phone" as const,
@@ -168,7 +233,7 @@ export function computeFinalScore({
 
   const { score: addrRisk, signals: addrSigs } = getAddressRiskScoreOrNeutral(addressResult);
   const addrScore = Math.max(0, 100 - addrRisk);
-  weightedScore += addrScore * 0.2;
+  weightedScore += addrScore * addrW;
   signals.push(
     ...addrSigs.map((s) => ({
       signal_type: "address" as const,
@@ -179,7 +244,7 @@ export function computeFinalScore({
   );
 
   const { score: histScore, signals: histSigs } = getHistoricalScore(historicalData);
-  weightedScore += histScore * 0.2;
+  weightedScore += histScore * histW;
   signals.push(
     ...histSigs.map((s) => ({
       signal_type: "history" as const,
@@ -191,29 +256,18 @@ export function computeFinalScore({
 
   let finalScore = Math.round(Math.max(0, Math.min(100, weightedScore)));
 
-  const nFake = networkIgFakeCount ?? 0;
-  if (nFake >= 2) {
-    const cap = 12;
-    if (finalScore > cap) {
-      finalScore = cap;
-      signals.push({
-        signal_type: "history",
-        signal_name: "network_fraud_cap",
-        impact: 0,
-        description: "Cross-seller network: multiple fake outcomes for this handle — score capped (advisory only)"
-      });
-    }
-  } else if (nFake === 1) {
-    const cap = 40;
-    if (finalScore > cap) {
-      finalScore = cap;
-      signals.push({
-        signal_type: "history",
-        signal_name: "network_fraud_signal",
-        impact: 0,
-        description: "Cross-seller network: prior fake outcome for this handle — score reduced (advisory only)"
-      });
-    }
+  const row = networkIgRow ?? null;
+  const ceiling = computeNetworkScoreCeiling(row);
+
+  if (ceiling != null && finalScore > ceiling) {
+    finalScore = ceiling;
+    signals.push({
+      signal_type: "history",
+      signal_name: "network_verified_ceiling",
+      impact: 0,
+      description:
+        "Cross-seller network shows verified fake outcomes — final score capped (structured override; seller-safe precedence over chat-only positives)."
+    });
   }
 
   return {
