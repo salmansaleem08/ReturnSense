@@ -416,148 +416,167 @@ function autoDetectPhone(messages) {
   return null;
 }
 
-const ADDRESS_KEYWORDS = [
-  "house",
-  "flat",
-  "floor",
-  "apartment",
-  "plot",
-  "street",
-  "road",
-  "avenue",
-  "lane",
-  "sector",
-  "block",
-  "phase",
-  "town",
-  "colony",
-  "society",
-  "near",
-  "opposite",
-  "behind",
-  "beside",
-  "mohallah",
-  "mohalla",
-  "gali",
-  "chowk",
-  "bazar",
-  "bazaar",
-  "market",
-  "DHA",
-  "Gulshan",
-  "Gulberg",
-  "Clifton",
-  "Defence",
-  "Bahria",
-  "Askari",
-  "Cantt"
-];
-
-const PK_CITIES = [
-  "Karachi",
-  "Lahore",
-  "Islamabad",
-  "Rawalpindi",
-  "Faisalabad",
-  "Multan",
-  "Peshawar",
-  "Quetta",
-  "Sialkot",
-  "Gujranwala",
-  "Hyderabad",
-  "Abbottabad",
-  "Bahawalpur",
-  "Sargodha",
-  "Sheikhupura",
-  "Jhang",
-  "Rahim Yar Khan",
-  "Larkana",
-  "Mardan",
-  "Kasur",
-  "Okara",
-  "Sahiwal",
-  "Wah",
-  "Taxila",
-  "Attock",
-  "Chakwal",
-  "Jhelum",
-  "Gujrat",
-  "Hafizabad",
-  "Mandi Bahauddin"
-];
-
-const COMMITMENT_PHRASES = [
-  "okay",
-  "ok",
-  "theek hai",
-  "theek",
-  "bhej do",
-  "send karo",
-  "confirm",
-  "yes",
-  "ha",
-  "haan",
-  "done",
-  "agreed",
-  "zaroor",
-  "bilkul"
-];
-
-/**
- * Heuristic delivery-address detection from buyer messages.
- * @param {Array<{ role: string; text: string }>} messages
- * @returns {string|null}
- */
 function autoDetectAddress(messages) {
-  if (!Array.isArray(messages) || messages.length === 0) return null;
+  if (!messages || messages.length === 0) return null;
 
-  /** @type {Array<{ score: number; text: string }>} */
-  const scored = [];
+  const addressKeywords = [
+    "house",
+    "flat",
+    "floor",
+    "apartment",
+    "plot",
+    "street",
+    "road",
+    "avenue",
+    "lane",
+    "sector",
+    "block",
+    "phase",
+    "town",
+    "colony",
+    "society",
+    "near",
+    "opposite",
+    "behind",
+    "beside",
+    "mohallah",
+    "mohalla",
+    "gali",
+    "chowk",
+    "bazar",
+    "bazaar",
+    "market",
+    "DHA",
+    "Gulshan",
+    "Gulberg",
+    "Clifton",
+    "Defence",
+    "Bahria",
+    "Askari",
+    "Cantt",
+    "F-7",
+    "F-10",
+    "E-11",
+    "G-9",
+    "johar",
+    "johar town",
+    "model town",
+    "garden town",
+    "cavalry ground"
+  ];
 
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i];
-    if (!msg || (msg.role !== "buyer" && msg.role !== "unknown")) continue;
+  const cityNames = [
+    "Karachi",
+    "Lahore",
+    "Islamabad",
+    "Rawalpindi",
+    "Faisalabad",
+    "Multan",
+    "Peshawar",
+    "Quetta",
+    "Sialkot",
+    "Gujranwala",
+    "Hyderabad",
+    "Abbottabad",
+    "Bahawalpur",
+    "Sargodha",
+    "Sheikhupura",
+    "Jhang",
+    "Rahim Yar Khan",
+    "Larkana",
+    "Mardan",
+    "Kasur",
+    "Okara",
+    "Sahiwal",
+    "Wah",
+    "Taxila",
+    "Attock",
+    "Chakwal",
+    "Jhelum",
+    "Gujrat",
+    "Hafizabad",
+    "Mandi Bahauddin",
+    "Mirpur",
+    "Muzaffarabad",
+    "Sukkur",
+    "Nawabshah",
+    "Khuzdar",
+    "Hub",
+    "Turbat",
+    "D.I. Khan",
+    "Bannu",
+    "Kohat",
+    "Mingora",
+    "Swat"
+  ];
 
-    const text = typeof msg.text === "string" ? msg.text : "";
-    const trimmed = text.trim();
-    if (!trimmed) continue;
+  const commitmentPhrases = [
+    "okay",
+    "ok",
+    "theek hai",
+    "theek",
+    "bhej do",
+    "send karo",
+    "confirm",
+    "yes",
+    "ha",
+    "haan",
+    "done",
+    "agreed",
+    "zaroor",
+    "bilkul",
+    "thk",
+    "acha",
+    "accha",
+    "shukriya",
+    "thanks",
+    "thank you",
+    "order confirm",
+    "pakka"
+  ];
 
-    const low = trimmed.toLowerCase();
+  const prioritized = [
+    ...messages.filter((m) => m && (m.role === "buyer" || m.role === "unknown")),
+    ...messages.filter((m) => m && m.role === "seller")
+  ];
+
+  const scored = prioritized.map((msg, idx) => {
+    const text = (msg && msg.text) || "";
+    const lower = text.toLowerCase();
     let score = 0;
 
-    for (let k = 0; k < ADDRESS_KEYWORDS.length; k++) {
-      const kw = ADDRESS_KEYWORDS[k];
-      if (low.includes(String(kw).toLowerCase())) score += 3;
+    for (let ki = 0; ki < addressKeywords.length; ki++) {
+      if (lower.includes(addressKeywords[ki].toLowerCase())) score += 3;
+    }
+    for (let ci = 0; ci < cityNames.length; ci++) {
+      if (lower.includes(cityNames[ci].toLowerCase())) score += 5;
+    }
+    if (text.length > 30) score += 2;
+    if (text.length > 60) score += 2;
+
+    const prevMsg = prioritized[idx - 1];
+    if (prevMsg) {
+      const prevLower = ((prevMsg && prevMsg.text) || "").toLowerCase();
+      if (commitmentPhrases.some((p) => prevLower.includes(p))) score += 4;
     }
 
-    for (let c = 0; c < PK_CITIES.length; c++) {
-      const city = PK_CITIES[c];
-      if (low.includes(String(city).toLowerCase())) score += 5;
+    if (/\b(h#|h\s*#|house\s*#|plot\s*#|flat\s*#|no\s*\.?\s*\d+|\d+[\-\/]\w)/i.test(text)) {
+      score += 5;
     }
 
-    if (trimmed.length > 30) score += 2;
+    return { text, score };
+  });
 
-    if (i > 0) {
-      const prev = messages[i - 1];
-      const prevText = typeof prev?.text === "string" ? prev.text.toLowerCase() : "";
-      if (prevText) {
-        for (let p = 0; p < COMMITMENT_PHRASES.length; p++) {
-          if (prevText.includes(COMMITMENT_PHRASES[p].toLowerCase())) {
-            score += 4;
-            break;
-          }
-        }
-      }
-    }
+  const candidates = scored.filter((s) => s.score > 3).sort((a, b) => b.score - a.score);
 
-    scored.push({ score, text: trimmed });
+  if (candidates.length > 0) {
+    const top = candidates[0];
+    const preview = (top.text || "").substring(0, 60);
+    console.log("[RS] autoDetectAddress found candidate (score " + top.score + "):", preview);
+    return top.text;
   }
 
-  const above = scored.filter((s) => s.score > 3);
-  if (!above.length) return null;
-
-  above.sort((a, b) => b.score - a.score);
-  return above[0].text;
+  return null;
 }
 
 function findChatHeaderToolbar() {
