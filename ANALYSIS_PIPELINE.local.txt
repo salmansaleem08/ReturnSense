@@ -12,13 +12,13 @@ OVERVIEW
 
 EXTENSION ATTRIBUTION (extension/content.js — harvestVisibleMessages)
 -----------------------------------------------------------------------
-• Each bubble: walk up to 28 ancestors; read computed justify-content (lowercased).
-• flex-end / end → track deepest depth seen (seller / “you” row).
-• flex-start / start → track deepest depth seen (buyer / counterparty row).
-• If both exist: deeper depth wins (avoids shallow column flex-start beating bubble flex-end).
-• If depths tie → unknown, then geometry fallback (bubble center vs viewport mid).
-• Never treats justify-content: normal as buyer (that caused all lines to classify as buyer).
-• Sends attribution_confidence 0.9 (single alignment), 0.78 (both axes seen), 0.64 (geometry), 0.41 (unknown).
+• Primary: compare message bubble center X to the center of `[role=main]` (the DM column), not
+  `window.innerWidth/2` (Instagram’s thread is a narrow column; viewport mid misclassifies everything).
+• Bubble box: `rsPickMessageBubbleRect` — widest `div[dir=auto]` in the row (full-width row rects are ignored).
+• LTR: center right of thread mid → seller (you); left → buyer. RTL: mirrored.
+• Flex (justify-content end/start) is secondary: flex-start-only never implies buyer (column flex-start
+  affected all rows). flex-end-only can still mark seller; both axes → deepest wins if geometry failed.
+• Last resort: viewport-centered geometry. Confidence ~0.88 thread geometry, ~0.62 viewport, ~0.82 flex-only.
 
 SERVER ATTRIBUTION (apps/web/lib/analysis/attribution.ts)
 ---------------------------------------------------------

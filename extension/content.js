@@ -60,6 +60,46 @@ function resetCaptureIdleTimer() {
 }
 
 /**
+ * Best-effort bubble box for side detection. Prefer the widest `dir=auto` cell in a row
+ * so we do not use the full-width row rect (that would sit on the thread midline).
+ */
+function rsPickMessageBubbleRect(messageEl) {
+  try {
+    /** @type {Element[]} */
+    const candidates = [];
+    if (typeof messageEl.matches === "function" && messageEl.matches('div[dir="auto"]')) {
+      candidates.push(messageEl);
+    }
+    const nodes =
+      typeof messageEl.querySelectorAll === "function"
+        ? messageEl.querySelectorAll('div[dir="auto"]')
+        : [];
+    for (let ni = 0; ni < nodes.length; ni++) {
+      candidates.push(nodes[ni]);
+    }
+    let best = null;
+    let bestW = 0;
+    for (let ci = 0; ci < candidates.length; ci++) {
+      const node = candidates[ci];
+      const r = node.getBoundingClientRect();
+      if (r.width > bestW && r.width > 4 && r.height > 2) {
+        bestW = r.width;
+        best = r;
+      }
+    }
+    if (best) return best;
+  } catch (_e) {
+    /* fall through */
+  }
+  try {
+    const r = messageEl.getBoundingClientRect();
+    return r.width > 2 && r.height > 2 ? r : null;
+  } catch (_e) {
+    return null;
+  }
+}
+
+/**
  * Merges visible DOM messages into `capturedMessages` while user scrolls.
  */
 function harvestVisibleMessages() {
@@ -71,6 +111,13 @@ function harvestVisibleMessages() {
 
     let elements = Array.from(main.querySelectorAll('[role="row"]'));
 
+    let mainRectForFilter = { left: 0, right: 0, top: 0, bottom: 0 };
+    try {
+      mainRectForFilter = main.getBoundingClientRect();
+    } catch (_e) {
+      /* keep zeros */
+    }
+
     if (elements.length === 0) {
       elements = Array.from(main.querySelectorAll('div[dir="auto"]')).filter((el) => {
         let rect = { left: 0, width: 0, height: 0 };
@@ -79,7 +126,9 @@ function harvestVisibleMessages() {
         } catch (_e) {
           return false;
         }
-        return rect.left > 350 && rect.width > 0 && rect.height > 0;
+        if (rect.width < 2 || rect.height < 2) return false;
+        const cx = rect.left + rect.width / 2;
+        return cx >= mainRectForFilter.left && cx <= mainRectForFilter.right;
       });
     }
 
@@ -99,13 +148,10 @@ function harvestVisibleMessages() {
       if (skipPatterns.some((p) => p.test(text))) continue;
 
       /**
-       * Instagram aligns “you” (seller) with flex-end and the counterparty with flex-start on a row.
-       * Do NOT treat justify-content: normal as buyer — many wrappers use “normal”, so the first hit
-       * was always buyer and every line looked like the buyer (422 ATTRIBUTION_ONE_SIDED).
+       * Instagram Web: the DM column is narrow on the right; using window.innerWidth/2 is wrong.
+       * The outer scroll column often has only flex-start, so "flex-start only → buyer" marks EVERY
+       * line as buyer. Primary signal: bubble horizontal center vs [role=main] center (LTR: right = you).
        */
-      let role = "unknown";
-      let layoutSource = "none";
-      /** Deepest ancestor index (most specific row wrapper) where we saw each alignment */
       let flexEndDepth = -1;
       let flexStartDepth = -1;
       let ancestor = el;
@@ -129,32 +175,64 @@ function harvestVisibleMessages() {
         }
       }
 
-      if (flexEndDepth >= 0 && flexStartDepth >= 0) {
-        if (flexEndDepth === flexStartDepth) {
-          role = "unknown";
-          layoutSource = "layout-tie";
+      const bubbleRect = rsPickMessageBubbleRect(el);
+
+      let role = "unknown";
+      let layoutSource = "none";
+
+      let mainRect = mainRectForFilter;
+      let direction = "ltr";
+      try {
+        mainRect = main.getBoundingClientRect();
+        direction = String(getComputedStyle(main).direction || "ltr").toLowerCase();
+      } catch (_e) {
+        /* use mainRectForFilter */
+      }
+
+      const isRtl = direction === "rtl";
+      if (bubbleRect && mainRect.width > 80) {
+        const threadMid = mainRect.left + mainRect.width / 2;
+        const cx = bubbleRect.left + bubbleRect.width / 2;
+        const slack = Math.max(10, Math.min(44, mainRect.width * 0.065));
+        if (!isRtl) {
+          if (cx > threadMid + slack) {
+            role = "seller";
+            layoutSource = "geometry-thread";
+          } else if (cx < threadMid - slack) {
+            role = "buyer";
+            layoutSource = "geometry-thread";
+          }
         } else {
-          role = flexEndDepth > flexStartDepth ? "seller" : "buyer";
-          layoutSource = role === "seller" ? "flex-end" : "flex-start";
+          if (cx < threadMid - slack) {
+            role = "seller";
+            layoutSource = "geometry-thread-rtl";
+          } else if (cx > threadMid + slack) {
+            role = "buyer";
+            layoutSource = "geometry-thread-rtl";
+          }
         }
-      } else if (flexEndDepth >= 0) {
-        role = "seller";
-        layoutSource = "flex-end";
-      } else if (flexStartDepth >= 0) {
-        role = "buyer";
-        layoutSource = "flex-start";
       }
 
       if (role === "unknown") {
+        if (flexEndDepth >= 0 && flexStartDepth >= 0 && flexEndDepth !== flexStartDepth) {
+          role = flexEndDepth > flexStartDepth ? "seller" : "buyer";
+          layoutSource = role === "seller" ? "flex-end" : "flex-start";
+        } else if (flexEndDepth >= 0) {
+          role = "seller";
+          layoutSource = "flex-end";
+        }
+      }
+
+      if (role === "unknown" && bubbleRect) {
         try {
-          const rect = el.getBoundingClientRect?.();
           const viewMid = window.innerWidth / 2;
-          if (rect && rect.left + rect.width / 2 > viewMid + 40) {
+          const cx = bubbleRect.left + bubbleRect.width / 2;
+          if (cx > viewMid + 40) {
             role = "seller";
-            layoutSource = "geometry-right";
-          } else if (rect && rect.left + rect.width / 2 < viewMid - 40) {
+            layoutSource = "geometry-viewport";
+          } else if (cx < viewMid - 40) {
             role = "buyer";
-            layoutSource = "geometry-left";
+            layoutSource = "geometry-viewport";
           }
         } catch (_e) {
           /* keep unknown */
@@ -164,20 +242,21 @@ function harvestVisibleMessages() {
       /** @type {string[]} */
       const attribution_signals = [];
       let attribution_confidence = 0.41;
-      if (layoutSource === "flex-end" || layoutSource === "flex-start") {
-        attribution_confidence =
-          flexEndDepth >= 0 && flexStartDepth >= 0 ? 0.78 : 0.9;
+      if (layoutSource === "geometry-thread" || layoutSource === "geometry-thread-rtl") {
+        attribution_confidence = 0.88;
+        attribution_signals.push(layoutSource);
+      } else if (layoutSource === "geometry-viewport") {
+        attribution_confidence = 0.62;
+        attribution_signals.push(layoutSource);
+      } else if (layoutSource === "flex-end" || layoutSource === "flex-start") {
+        attribution_confidence = flexEndDepth >= 0 && flexStartDepth >= 0 ? 0.78 : 0.82;
         attribution_signals.push(`layout:${layoutSource}`);
         if (flexEndDepth >= 0) attribution_signals.push(`flex-end@d${flexEndDepth}`);
         if (flexStartDepth >= 0) attribution_signals.push(`flex-start@d${flexStartDepth}`);
-      } else if (layoutSource === "layout-tie") {
-        attribution_confidence = 0.5;
-        attribution_signals.push("layout-tie");
-      } else if (layoutSource === "geometry-right" || layoutSource === "geometry-left") {
-        attribution_confidence = 0.64;
-        attribution_signals.push(layoutSource);
       } else {
         attribution_signals.push("role-unknown");
+        if (flexEndDepth >= 0) attribution_signals.push(`flex-end@d${flexEndDepth}`);
+        if (flexStartDepth >= 0) attribution_signals.push(`flex-start@d${flexStartDepth}`);
       }
 
       const alreadyExists = capturedMessages.some((m) => m && m.text === text);
