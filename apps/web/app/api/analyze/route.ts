@@ -79,6 +79,14 @@ export async function OPTIONS() {
 
 export const POST = withAuth(async ({ req, user }) => {
   try {
+    console.log("[RS-DEBUG] ENV CHECK:", {
+      ABSTRACT_API_KEY: process.env.ABSTRACT_API_KEY
+        ? `SET (${String(process.env.ABSTRACT_API_KEY).length} chars)`
+        : "MISSING",
+      GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY ? "SET" : "MISSING",
+      NODE_ENV: process.env.NODE_ENV
+    });
+
     const body = await req.json();
     const rawBody = body as {
       messages?: Array<{ role: string; text: string }>;

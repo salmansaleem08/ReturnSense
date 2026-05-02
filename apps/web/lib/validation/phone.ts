@@ -1,32 +1,44 @@
-export interface PhoneResult {
+export interface PhoneValidationResult {
   phone_valid: boolean | null;
-  phone_carrier?: string | null;
-  phone_is_voip?: boolean | null;
-  phone_country?: string | null;
-  phone_type?: string | null;
-  phone_local_format?: string | null;
-  phone_international_format?: string | null;
-  phone_number?: string | null;
-  phone_error?: string;
+  phone_carrier: string | null;
+  phone_is_voip: boolean | null;
+  phone_type: string | null;
+  phone_country: string | null;
+  phone_international_format: string | null;
+  phone_local_format: string | null;
+  phone_number: string | null;
   configured: boolean;
-  error?: string | null;
-  not_provided?: boolean;
+  not_provided: boolean;
+  error: string | null;
 }
 
-const PHONE_FAIL: PhoneResult = {
-  phone_valid: null,
-  phone_carrier: null,
-  phone_is_voip: null,
-  phone_type: null,
-  phone_country: null,
-  phone_international_format: null,
-  phone_local_format: null,
-  configured: true,
-  error: "Phone validation request failed"
-};
+/** @deprecated use PhoneValidationResult — kept for existing imports */
+export type PhoneResult = PhoneValidationResult;
 
-export async function validatePhone(phoneNumber?: string | null): Promise<PhoneResult | null> {
-  if (!process.env.ABSTRACT_API_KEY?.trim()) {
+function getAbstractApiKey(): string | null {
+  const raw =
+    process.env.ABSTRACT_API_KEY ??
+    process.env.ABSTRACTAPI_KEY ??
+    process.env.ABSTRACT_PHONE_API_KEY ??
+    process.env.ABSTRACT_KEY ??
+    "";
+  const trimmed = typeof raw === "string" ? raw.trim() : "";
+  return trimmed.length ? trimmed : null;
+}
+
+function abortAfter(ms: number): AbortSignal | undefined {
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+    return AbortSignal.timeout(ms);
+  }
+  return undefined;
+}
+
+export async function validatePhone(phoneInput?: string | null): Promise<PhoneValidationResult> {
+  const apiKey = getAbstractApiKey();
+
+  const cleanPhone = phoneInput?.replace(/[\s\-.]/g, "") ?? "";
+
+  if (!apiKey) {
     return {
       phone_valid: null,
       phone_carrier: null,
@@ -35,65 +47,133 @@ export async function validatePhone(phoneNumber?: string | null): Promise<PhoneR
       phone_country: null,
       phone_international_format: null,
       phone_local_format: null,
+      phone_number: cleanPhone || null,
       configured: false,
-      error: "ABSTRACT_API_KEY is not configured on the server"
+      not_provided: false,
+      error: "ABSTRACT_API_KEY environment variable is not set on the server"
     };
   }
 
-  const trimmed = phoneNumber?.trim();
-  if (!trimmed) return null;
-
-  const cleaned = trimmed.replace(/[^0-9+]/g, "");
-  if (cleaned.replace(/\D/g, "").length < 7) {
-    return null;
+  if (!cleanPhone) {
+    return {
+      phone_valid: null,
+      phone_carrier: null,
+      phone_is_voip: null,
+      phone_type: null,
+      phone_country: null,
+      phone_international_format: null,
+      phone_local_format: null,
+      phone_number: null,
+      configured: true,
+      not_provided: true,
+      error: null
+    };
   }
 
-  let res: Response;
   try {
-    res = await fetch(
-      `https://phonevalidation.abstractapi.com/v1/?api_key=${process.env.ABSTRACT_API_KEY.trim()}&phone=${encodeURIComponent(cleaned)}`
-    );
-  } catch {
-    return { ...PHONE_FAIL };
+    const url = `https://phonevalidation.abstractapi.com/v1/?api_key=${encodeURIComponent(apiKey)}&phone=${encodeURIComponent(cleanPhone)}`;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: abortAfter(8000)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "unknown");
+      console.error("[RS] Abstract API error:", response.status, errorText);
+      return {
+        phone_valid: null,
+        phone_carrier: null,
+        phone_is_voip: null,
+        phone_type: null,
+        phone_country: null,
+        phone_international_format: null,
+        phone_local_format: null,
+        phone_number: cleanPhone,
+        configured: true,
+        not_provided: false,
+        error: `Phone API returned HTTP ${response.status}`
+      };
+    }
+
+    const data = (await response.json()) as Record<string, unknown>;
+
+    if (data?.error) {
+      console.error("[RS] Abstract API payload error:", data.error);
+      return {
+        phone_valid: null,
+        phone_carrier: null,
+        phone_is_voip: null,
+        phone_type: null,
+        phone_country: null,
+        phone_international_format: null,
+        phone_local_format: null,
+        phone_number: cleanPhone,
+        configured: true,
+        not_provided: false,
+        error: String(data.error)
+      };
+    }
+
+    const fmt = data.format as Record<string, unknown> | undefined;
+    const country = data.country as Record<string, unknown> | string | undefined;
+    const countryName =
+      typeof country === "object" && country !== null && "name" in country
+        ? (country.name as string | null)
+        : typeof country === "string"
+          ? country
+          : null;
+
+    const lineType =
+      (typeof data.line_type === "string" ? data.line_type : null) ??
+      (typeof data.type === "string" ? data.type : null);
+
+    const ltLower = lineType?.toLowerCase() ?? "";
+    const isVoip =
+      ltLower.includes("voip") ||
+      ltLower === "voip" ||
+      lineType === "VoIP";
+
+    const intl =
+      (fmt?.international as string | undefined) ??
+      (typeof data.international_format === "string" ? data.international_format : null);
+    const local =
+      (fmt?.local as string | undefined) ??
+      (typeof data.local_format === "string" ? data.local_format : null);
+
+    return {
+      phone_valid: typeof data.valid === "boolean" ? data.valid : null,
+      phone_carrier: typeof data.carrier === "string" ? data.carrier : null,
+      phone_is_voip: isVoip,
+      phone_type: lineType,
+      phone_country: countryName,
+      phone_international_format: intl,
+      phone_local_format: local,
+      phone_number: cleanPhone,
+      configured: true,
+      not_provided: false,
+      error: null
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("[RS] validatePhone threw:", message);
+    return {
+      phone_valid: null,
+      phone_carrier: null,
+      phone_is_voip: null,
+      phone_type: null,
+      phone_country: null,
+      phone_international_format: null,
+      phone_local_format: null,
+      phone_number: cleanPhone,
+      configured: true,
+      not_provided: false,
+      error: `Phone validation failed: ${message}`
+    };
   }
-
-  if (!res.ok) {
-    return { ...PHONE_FAIL };
-  }
-
-  let data: Record<string, unknown>;
-  try {
-    data = (await res.json()) as Record<string, unknown>;
-  } catch {
-    return { ...PHONE_FAIL };
-  }
-
-  if (!data || data.error) {
-    return { ...PHONE_FAIL };
-  }
-
-  const row = data as {
-    valid?: boolean;
-    carrier?: string | null;
-    type?: string | null;
-    country?: { name?: string | null };
-    local_format?: string | null;
-    international_format?: string | null;
-  };
-
-  return {
-    phone_valid: Boolean(row.valid),
-    phone_carrier: row.carrier ?? null,
-    phone_is_voip: row.type === "VoIP",
-    phone_country: row.country?.name ?? null,
-    phone_type: row.type ?? null,
-    phone_local_format: row.local_format ?? null,
-    phone_international_format: row.international_format ?? null,
-    configured: true
-  };
 }
 
-export function getPhoneRiskScore(phoneResult?: PhoneResult | null) {
+export function getPhoneRiskScore(phoneResult?: PhoneValidationResult | null) {
   if (!phoneResult || phoneResult.configured !== true) {
     return { score: 0, signals: [] as Array<{ name: string; impact: number; description: string }> };
   }
@@ -116,7 +196,7 @@ export function getPhoneRiskScore(phoneResult?: PhoneResult | null) {
     riskPoints += 25;
     signals.push({ name: "voip_number", impact: -25, description: "VoIP number detected — often used for fake orders" });
   }
-  if (phoneResult.phone_type === "landline") {
+  if (phoneResult.phone_type?.toLowerCase() === "landline") {
     riskPoints += 10;
     signals.push({ name: "landline_number", impact: -10, description: "Landline number given for delivery — unusual" });
   }
