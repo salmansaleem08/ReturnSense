@@ -4,6 +4,8 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { PageAmbientBg } from "@/components/layout/page-ambient";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 function VerifyEmailInner() {
@@ -40,78 +42,46 @@ function VerifyEmailInner() {
     setPending(false);
   }
 
+  const disabled = !email.trim() || cooldown > 0 || pending;
+
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#FAFAFA",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        paddingTop: "12vh",
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-        paddingLeft: "16px",
-        paddingRight: "16px"
-      }}
-    >
-      <div
-        style={{
-          width: "40px",
-          height: "40px",
-          background: "#262626",
-          borderRadius: "10px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "white",
-          fontWeight: 700,
-          fontSize: "22px",
-          fontFamily: "Georgia, serif",
-          marginBottom: "20px"
-        }}
-      >
-        R
-      </div>
-      <div
-        style={{
-          maxWidth: "400px",
-          background: "#fff",
-          border: "1px solid #DBDBDB",
-          borderRadius: "4px",
-          padding: "28px 24px",
-          textAlign: "center"
-        }}
-      >
-        <h1 style={{ fontSize: "18px", fontWeight: 600, color: "#262626", marginBottom: "12px" }}>Check your email</h1>
-        <p style={{ fontSize: "14px", color: "#737373", lineHeight: 1.5 }}>
-          We sent a link to <strong style={{ color: "#262626" }}>{email || "your email"}</strong>. Click it to activate your
-          account.
-        </p>
-        <button
-          type="button"
-          disabled={!email.trim() || cooldown > 0 || pending}
-          onClick={() => void resend()}
-          style={{
-            marginTop: "18px",
-            width: "100%",
-            background: cooldown > 0 ? "#EFEFEF" : "#0095F6",
-            color: cooldown > 0 ? "#737373" : "#fff",
-            border: "none",
-            borderRadius: "8px",
-            padding: "8px",
-            fontWeight: 600,
-            fontSize: "14px",
-            cursor: cooldown > 0 ? "not-allowed" : "pointer"
-          }}
-        >
-          {pending ? "Sending…" : cooldown > 0 ? `Resend email (${cooldown}s)` : "Resend email"}
-        </button>
-        {msg ? <p style={{ marginTop: "12px", fontSize: "13px", color: "#262626" }}>{msg}</p> : null}
-        <p style={{ marginTop: "16px", fontSize: "13px" }}>
-          <Link href="/login" style={{ color: "#0095F6", fontWeight: 600 }}>
-            Back to log in
+    <div className="rs-page-ambient relative min-h-screen bg-background">
+      <PageAmbientBg />
+      <div className="relative z-10 flex min-h-screen flex-col items-center px-4 pb-16 pt-10">
+        <div className="absolute right-4 top-4 z-20 flex gap-2">
+          <ThemeToggle />
+          <Link
+            href="/"
+            className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted"
+          >
+            Home
           </Link>
-        </p>
+        </div>
+
+        <div className="rs-logo-mark rs-logo-mark--lg mb-8 mt-[10vh]">R</div>
+
+        <div className="rs-card-elevated w-full max-w-md rounded-2xl border border-border p-8 text-center">
+          <h1 className="text-xl font-bold md:text-2xl">
+            <span className="rs-text-gradient">Check your email</span>
+          </h1>
+          <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+            We sent a link to <strong className="text-foreground">{email || "your email"}</strong>. Click it to activate your account.
+          </p>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => void resend()}
+            className="mt-6 w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            {pending ? "Sending…" : cooldown > 0 ? `Resend email (${cooldown}s)` : "Resend email"}
+          </button>
+          {msg ? <p className="mt-4 text-sm text-foreground">{msg}</p> : null}
+          <p className="mt-6 text-sm">
+            <Link href="/login" className="font-semibold text-primary hover:underline">
+              Back to log in
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -121,7 +91,10 @@ export default function VerifyEmailPage() {
   return (
     <Suspense
       fallback={
-        <div style={{ minHeight: "100vh", background: "#FAFAFA", padding: "40px", textAlign: "center" }}>Loading…</div>
+        <div className="rs-page-ambient flex min-h-screen items-center justify-center bg-background">
+          <PageAmbientBg />
+          <p className="relative z-10 text-sm text-muted-foreground">Loading…</p>
+        </div>
       }
     >
       <VerifyEmailInner />

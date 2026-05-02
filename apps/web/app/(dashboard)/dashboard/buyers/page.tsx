@@ -48,8 +48,14 @@ export default async function BuyersPage({
   const total = count ?? 0;
 
   return (
-    <div className="space-y-5">
-      <form className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-5">
+    <div className="space-y-6">
+      <header className="space-y-1">
+        <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+          <span className="rs-text-gradient">Buyers</span>
+        </h1>
+        <p className="text-sm text-muted-foreground">Search and filter your analyzed Instagram buyers</p>
+      </header>
+      <form className="rs-card-elevated grid gap-3 rounded-xl p-4 md:grid-cols-5">
         <Input name="search" placeholder="Search username" defaultValue={search} />
         <select name="risk_level" defaultValue={riskLevel} className="rs-select">
           <option value="">All Risk Levels</option>

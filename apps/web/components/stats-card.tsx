@@ -8,7 +8,7 @@ interface StatsCardProps {
 
 export function StatsCard({ title, value, helper }: StatsCardProps) {
   return (
-    <Card className="rounded-[var(--radius-md)] border-border shadow-none">
+    <Card className="rs-stats-card rounded-[var(--radius-md)] shadow-none">
       <CardHeader className="pb-2">
         <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</CardTitle>
       </CardHeader>

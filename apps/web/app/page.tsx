@@ -10,6 +10,7 @@ import {
   TrendingUp
 } from "lucide-react";
 
+import { PageAmbientBg } from "@/components/layout/page-ambient";
 import { MarketingBarSpark, MarketingRiskDonut, MarketingTrendChart } from "@/components/marketing/mini-charts";
 import { PublicHeader } from "@/components/marketing/public-header";
 
@@ -90,7 +91,10 @@ const plans = [
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="rs-page-ambient relative min-h-screen bg-background text-foreground">
+      <PageAmbientBg />
+
+      <div className="relative z-10">
       <PublicHeader />
 
       <section className="relative overflow-hidden border-b border-border/60">
@@ -106,10 +110,7 @@ export default function HomePage() {
             </p>
             <h1 className="mt-5 text-4xl font-bold tracking-tight text-foreground md:text-5xl lg:text-[3.25rem] lg:leading-[1.1]">
               Fewer fake orders.
-              <span className="block bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-600 bg-clip-text text-transparent">
-                {" "}
-                Faster confident dispatch.
-              </span>
+              <span className="mt-1 block rs-text-gradient lg:mt-2">Faster confident dispatch.</span>
             </h1>
             <p className="mt-5 max-w-lg text-base leading-relaxed text-muted-foreground md:text-lg">
               ReturnSense helps you decide which Instagram buyers to trust for cash-on-delivery — with clear scores, phone and
@@ -162,7 +163,9 @@ export default function HomePage() {
 
       <section id="features" className="border-b border-border/60 py-20 md:py-28">
         <div className="mx-auto max-w-6xl px-4 md:px-6">
-          <h2 className="text-center text-3xl font-bold tracking-tight md:text-4xl">What you get</h2>
+          <h2 className="text-center text-3xl font-bold tracking-tight md:text-4xl">
+            <span className="rs-text-gradient">What you get</span>
+          </h2>
           <p className="mx-auto mt-3 max-w-2xl text-center text-muted-foreground">
             Everything is framed around your commercial decision: trust the buyer enough to send stock on COD, or protect your
             margin first.
@@ -187,7 +190,9 @@ export default function HomePage() {
       <section id="how" className="relative overflow-hidden py-20 md:py-28">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-muted/40 via-transparent to-muted/30" />
         <div className="relative mx-auto max-w-6xl px-4 md:px-6">
-          <h2 className="text-center text-3xl font-bold tracking-tight md:text-4xl">How it works</h2>
+          <h2 className="text-center text-3xl font-bold tracking-tight md:text-4xl">
+            <span className="rs-text-gradient">How it works</span>
+          </h2>
           <p className="mx-auto mt-3 max-w-xl text-center text-muted-foreground">Three steps from chat to a confident dispatch call.</p>
           <div className="mt-14 grid gap-8 md:grid-cols-3">
             {steps.map((s, i) => (
@@ -205,7 +210,9 @@ export default function HomePage() {
 
       <section id="pricing" className="border-t border-border/60 py-20 md:py-28">
         <div className="mx-auto max-w-6xl px-4 md:px-6">
-          <h2 className="text-center text-3xl font-bold tracking-tight md:text-4xl">Simple plans</h2>
+          <h2 className="text-center text-3xl font-bold tracking-tight md:text-4xl">
+            <span className="rs-text-gradient">Simple plans</span>
+          </h2>
           <p className="mx-auto mt-3 max-w-lg text-center text-muted-foreground">
             Start free and scale when your order volume grows.
           </p>
@@ -251,6 +258,7 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+      </div>
     </div>
   );
 }

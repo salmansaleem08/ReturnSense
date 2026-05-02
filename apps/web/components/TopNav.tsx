@@ -24,13 +24,11 @@ export function TopNav() {
   }
 
   return (
-    <nav className="sticky top-0 z-50 h-[54px] border-b border-border bg-card/90 backdrop-blur-md">
+    <nav className="rs-z-nav-main sticky top-0 z-50 h-[54px] border-b border-border/80 bg-card/75 backdrop-blur-xl">
       <div className="mx-auto flex h-full max-w-ig items-center justify-between px-4 sm:px-5">
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-slate-800 to-slate-900 text-sm font-bold text-white dark:from-slate-200 dark:to-slate-100 dark:text-slate-900">
-            R
-          </div>
-          <span className="text-base font-semibold tracking-tight text-foreground">ReturnSense</span>
+        <Link href="/dashboard" className="flex items-center gap-2.5">
+          <span className="rs-logo-mark text-[13px]">R</span>
+          <span className="rs-text-gradient text-base font-semibold tracking-tight">ReturnSense</span>
         </Link>
 
         <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-0">
@@ -40,10 +38,10 @@ export function TopNav() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+                className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${
                   active
-                    ? "bg-muted font-semibold text-foreground"
-                    : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                    ? "rs-nav-active font-semibold text-foreground"
+                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                 }`}
               >
                 {item.label}

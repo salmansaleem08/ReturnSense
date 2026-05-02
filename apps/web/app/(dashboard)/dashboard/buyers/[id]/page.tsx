@@ -52,7 +52,14 @@ export default async function BuyerDetailPage({ params }: { params: { id: string
   const analystNotes = buyer.ai_raw_response?.analyst_notes || "No analyst notes available.";
 
   return (
-    <div className="grid w-full max-w-[min(1600px,100%)] gap-6 lg:grid-cols-5 motion-safe:animate-[rs-fade-in_0.4s_ease-out]">
+    <div className="w-full max-w-[min(1600px,100%)] space-y-6 motion-safe:animate-[rs-fade-in_0.4s_ease-out]">
+      <header className="space-y-1">
+        <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+          <span className="rs-text-gradient">@{buyer.instagram_username}</span>
+        </h1>
+        <p className="text-sm text-muted-foreground">Analysis detail and delivery context</p>
+      </header>
+      <div className="grid w-full gap-6 lg:grid-cols-5">
       <section className="space-y-4 lg:col-span-3 lg:pr-2">
         <TrustScoreGauge score={buyer.final_trust_score ?? 0} />
 
@@ -69,7 +76,10 @@ export default async function BuyerDetailPage({ params }: { params: { id: string
           <div className="flex flex-wrap gap-2">
             {positiveSignals.length
               ? positiveSignals.map((signal: { id: string; signal_name: string }) => (
-                  <span key={signal.id} className="rounded-full bg-emerald-100 px-3 py-1 text-xs text-emerald-700">
+                  <span
+                    key={signal.id}
+                    className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-400"
+                  >
                     {signal.signal_name}
                   </span>
                 ))
@@ -82,7 +92,10 @@ export default async function BuyerDetailPage({ params }: { params: { id: string
           <div className="flex flex-wrap gap-2">
             {negativeSignals.length
               ? negativeSignals.map((signal: { id: string; signal_name: string }) => (
-                  <span key={signal.id} className="rounded-full bg-red-100 px-3 py-1 text-xs text-red-700">
+                  <span
+                    key={signal.id}
+                    className="rounded-full bg-red-500/15 px-3 py-1 text-xs text-red-800 dark:bg-red-500/10 dark:text-red-400"
+                  >
                     {signal.signal_name}
                   </span>
                 ))
@@ -168,6 +181,7 @@ export default async function BuyerDetailPage({ params }: { params: { id: string
           </ul>
         </div>
       </aside>
+      </div>
     </div>
   );
 }

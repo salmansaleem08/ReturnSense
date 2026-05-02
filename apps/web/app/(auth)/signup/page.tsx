@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { AuthMarketingPanel } from "@/components/auth/auth-marketing-panel";
+import { PageAmbientBg } from "@/components/layout/page-ambient";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -60,8 +61,10 @@ export default function SignupPage() {
     "w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm text-foreground outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-background to-muted/30">
-      <div className="absolute right-4 top-4 flex gap-2">
+    <div className="rs-page-ambient relative min-h-screen bg-background">
+      <PageAmbientBg />
+      <div className="relative z-10">
+      <div className="absolute right-4 top-4 z-20 flex gap-2">
         <ThemeToggle />
         <Link
           href="/"
@@ -73,12 +76,12 @@ export default function SignupPage() {
 
       <div className="mx-auto grid min-h-screen max-w-6xl grid-cols-1 gap-8 px-4 py-16 lg:grid-cols-2 lg:items-center lg:gap-12 lg:px-8 lg:py-12">
         <div className="order-2 lg:order-1">
-          <div className="mx-auto w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-xl shadow-black/5 dark:shadow-black/30">
+          <div className="rs-card-elevated mx-auto w-full max-w-md rounded-2xl border border-border p-8">
             <div className="mb-8 text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-violet-600 text-xl font-bold text-white">
-                R
-              </div>
-              <h1 className="text-2xl font-bold text-foreground">Create your account</h1>
+              <div className="rs-logo-mark rs-logo-mark--lg mx-auto mb-4">R</div>
+              <h1 className="text-2xl font-bold">
+                <span className="rs-text-gradient">Create your account</span>
+              </h1>
               <p className="mt-2 text-sm text-muted-foreground">
                 Join sellers who use ReturnSense to stress-test COD decisions before every shipment.
               </p>
@@ -157,6 +160,7 @@ export default function SignupPage() {
         <div className="order-1 lg:order-2">
           <AuthMarketingPanel />
         </div>
+      </div>
       </div>
     </div>
   );
