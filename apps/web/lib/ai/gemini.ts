@@ -11,8 +11,8 @@ import {
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
 
-/** Stable model id (preview ids are retired often — override with GEMINI_MODEL). */
-const GEMINI_MODEL_ID = process.env.GEMINI_MODEL?.trim() || "gemini-2.0-flash";
+/** Default suited for new Google AI Studio projects (2.0-flash deprecated for new users). Override with GEMINI_MODEL. */
+const GEMINI_MODEL_ID = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
 
 /** Avoid responseMimeType JSON mode — some Gemini builds throw "Cannot coerce the result to a single JSON object". */
 export function getGeminiModel() {
@@ -120,7 +120,8 @@ function isGeminiModelUnavailableError(err: unknown) {
     blob.includes("404") ||
     blob.includes("is not supported") ||
     blob.includes("not supported for generatecontent") ||
-    blob.includes("listmodels")
+    blob.includes("listmodels") ||
+    blob.includes("no longer available")
   );
 }
 

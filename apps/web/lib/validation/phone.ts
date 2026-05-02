@@ -33,6 +33,25 @@ function abortAfter(ms: number): AbortSignal | undefined {
   return undefined;
 }
 
+/**
+ * Abstract Phone Intelligence (current) vs legacy Phone Validation — different hosts and keys.
+ * @see https://www.abstractapi.com/api/phone-intelligence
+ */
+function getAbstractPhoneApiBase(): string {
+  const raw = process.env.ABSTRACT_PHONE_API_URL?.trim();
+  if (raw) return raw.replace(/\/+$/, "");
+  return "https://phoneintelligence.abstractapi.com/v1";
+}
+
+/** Phone Intelligence may nest fields under `phone`; merge for shared mapping logic. */
+function abstractPayloadRoot(data: Record<string, unknown>): Record<string, unknown> {
+  const nested = data.phone;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    return { ...data, ...(nested as Record<string, unknown>) };
+  }
+  return data;
+}
+
 export async function validatePhone(phoneInput?: string | null): Promise<PhoneValidationResult> {
   const apiKey = getAbstractApiKey();
 
@@ -74,7 +93,9 @@ export async function validatePhone(phoneInput?: string | null): Promise<PhoneVa
   }
 
   try {
-    const url = `https://phonevalidation.abstractapi.com/v1/?api_key=${encodeURIComponent(apiKey)}&phone=${encodeURIComponent(cleanPhone)}`;
+    const base = getAbstractPhoneApiBase();
+    const url = `${base}/?api_key=${encodeURIComponent(apiKey)}&phone=${encodeURIComponent(cleanPhone)}`;
+    console.log("[RS-PHONE] Using Abstract phone API base:", base);
     const response = await fetch(url, {
       method: "GET",
       headers: { Accept: "application/json" },
@@ -88,7 +109,7 @@ export async function validatePhone(phoneInput?: string | null): Promise<PhoneVa
       let detail = `Phone API returned HTTP ${response.status}`;
       if (response.status === 401) {
         detail =
-          "Abstract API rejected this key (401). Use the API key from Abstract → Phone Validation (not another product). Regenerate at https://app.abstractapi.com/";
+          "Abstract API rejected this key (401). Keys are product-specific: use the key from the same product as your URL (Phone Intelligence: phoneintelligence.abstractapi.com). Set ABSTRACT_PHONE_API_URL if you use legacy Phone Validation. Regenerate at https://app.abstractapi.com/";
       } else if (response.status === 403 || response.status === 429) {
         detail = `Phone API rate limit or plan issue (${response.status}). Check Abstract dashboard billing and quotas.`;
       }
@@ -127,8 +148,10 @@ export async function validatePhone(phoneInput?: string | null): Promise<PhoneVa
       };
     }
 
-    const fmt = data.format as Record<string, unknown> | undefined;
-    const country = data.country as Record<string, unknown> | string | undefined;
+    const src = abstractPayloadRoot(data);
+
+    const fmt = src.format as Record<string, unknown> | undefined;
+    const country = src.country as Record<string, unknown> | string | undefined;
     const countryName =
       typeof country === "object" && country !== null && "name" in country
         ? (country.name as string | null)
@@ -137,8 +160,8 @@ export async function validatePhone(phoneInput?: string | null): Promise<PhoneVa
           : null;
 
     const lineType =
-      (typeof data.line_type === "string" ? data.line_type : null) ??
-      (typeof data.type === "string" ? data.type : null);
+      (typeof src.line_type === "string" ? src.line_type : null) ??
+      (typeof src.type === "string" ? src.type : null);
 
     const ltLower = lineType?.toLowerCase() ?? "";
     const isVoip =
@@ -148,14 +171,14 @@ export async function validatePhone(phoneInput?: string | null): Promise<PhoneVa
 
     const intl =
       (fmt?.international as string | undefined) ??
-      (typeof data.international_format === "string" ? data.international_format : null);
+      (typeof src.international_format === "string" ? src.international_format : null);
     const local =
       (fmt?.local as string | undefined) ??
-      (typeof data.local_format === "string" ? data.local_format : null);
+      (typeof src.local_format === "string" ? src.local_format : null);
 
     return {
-      phone_valid: typeof data.valid === "boolean" ? data.valid : null,
-      phone_carrier: typeof data.carrier === "string" ? data.carrier : null,
+      phone_valid: typeof src.valid === "boolean" ? src.valid : null,
+      phone_carrier: typeof src.carrier === "string" ? src.carrier : null,
       phone_is_voip: isVoip,
       phone_type: lineType,
       phone_country: countryName,
