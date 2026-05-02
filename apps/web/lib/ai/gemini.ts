@@ -11,10 +11,13 @@ import {
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
 
+/** Stable model id (preview ids are retired often — override with GEMINI_MODEL). */
+const GEMINI_MODEL_ID = process.env.GEMINI_MODEL?.trim() || "gemini-2.0-flash";
+
 /** Avoid responseMimeType JSON mode — some Gemini builds throw "Cannot coerce the result to a single JSON object". */
 export function getGeminiModel() {
   return genAI.getGenerativeModel({
-    model: "gemini-2.5-flash-preview-05-20",
+    model: GEMINI_MODEL_ID,
     generationConfig: {
       temperature: 0,
       topP: 1,
@@ -109,6 +112,18 @@ function isGeminiCoerceOrPartsError(err: unknown) {
   return blob.includes("coerce") || blob.includes("cannot merge") || blob.includes("single json");
 }
 
+/** Retired / wrong model name / API version — fall back without treating as hard failure. */
+function isGeminiModelUnavailableError(err: unknown) {
+  const blob = collectErrorText(err).toLowerCase();
+  return (
+    blob.includes("not found") ||
+    blob.includes("404") ||
+    blob.includes("is not supported") ||
+    blob.includes("not supported for generatecontent") ||
+    blob.includes("listmodels")
+  );
+}
+
 export async function analyzeWithGemini(
   messages: ChatMessage[],
   username: string,
@@ -130,8 +145,11 @@ export async function analyzeWithGemini(
         contents: [{ role: "user", parts: [{ text: prompt }] }]
       });
     } catch (genErr) {
-      if (isGeminiCoerceOrPartsError(genErr)) {
-        console.warn("Gemini generateContent failed (coerce/parts) — using OpenRouter fallback");
+      if (isGeminiCoerceOrPartsError(genErr) || isGeminiModelUnavailableError(genErr)) {
+        console.warn(
+          "[RS] Gemini generateContent unavailable — using OpenRouter fallback:",
+          collectErrorText(genErr).slice(0, 280)
+        );
         return await analyzeWithOpenRouter(messages, username, phoneProvided, addressProvided);
       }
       throw genErr;

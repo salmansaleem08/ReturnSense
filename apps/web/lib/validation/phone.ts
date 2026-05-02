@@ -84,6 +84,15 @@ export async function validatePhone(phoneInput?: string | null): Promise<PhoneVa
     if (!response.ok) {
       const errorText = await response.text().catch(() => "unknown");
       console.error("[RS] Abstract API error:", response.status, errorText);
+
+      let detail = `Phone API returned HTTP ${response.status}`;
+      if (response.status === 401) {
+        detail =
+          "Abstract API rejected this key (401). Use the API key from Abstract → Phone Validation (not another product). Regenerate at https://app.abstractapi.com/";
+      } else if (response.status === 403 || response.status === 429) {
+        detail = `Phone API rate limit or plan issue (${response.status}). Check Abstract dashboard billing and quotas.`;
+      }
+
       return {
         phone_valid: null,
         phone_carrier: null,
@@ -95,7 +104,7 @@ export async function validatePhone(phoneInput?: string | null): Promise<PhoneVa
         phone_number: cleanPhone,
         configured: true,
         not_provided: false,
-        error: `Phone API returned HTTP ${response.status}`
+        error: detail
       };
     }
 
