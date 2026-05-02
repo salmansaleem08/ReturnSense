@@ -63,6 +63,33 @@ function resetCaptureIdleTimer() {
  * Best-effort bubble box for side detection. Prefer the widest `dir=auto` cell in a row
  * so we do not use the full-width row rect (that would sit on the thread midline).
  */
+/**
+ * Incoming DM bubbles use `role="button"` on the interactive wrapper (long-press / reactions).
+ * Outgoing (seller / extension user) bubbles typically do not — geometry alone often mislabels when
+ * the thread column layout shifts everything to one side.
+ */
+function igRowLooksLikeIncomingBuyer(rowOrEl) {
+  try {
+    const row =
+      typeof rowOrEl.closest === "function" ? rowOrEl.closest('[role="row"]') : null;
+    const scope = row || rowOrEl;
+    const btns =
+      typeof scope.querySelectorAll === "function"
+        ? scope.querySelectorAll('[role="button"]')
+        : [];
+    for (let i = 0; i < btns.length; i++) {
+      const b = btns[i];
+      const r = b.getBoundingClientRect?.();
+      if (r && r.width >= 40 && r.height >= 18) {
+        return true;
+      }
+    }
+  } catch (_e) {
+    /* ignore */
+  }
+  return false;
+}
+
 function rsPickMessageBubbleRect(messageEl) {
   try {
     /** @type {Element[]} */
@@ -148,9 +175,10 @@ function harvestVisibleMessages() {
       if (skipPatterns.some((p) => p.test(text))) continue;
 
       /**
-       * Instagram Web: the DM column is narrow on the right; using window.innerWidth/2 is wrong.
-       * The outer scroll column often has only flex-start, so "flex-start only → buyer" marks EVERY
-       * line as buyer. Primary signal: bubble horizontal center vs [role=main] center (LTR: right = you).
+       * Instagram Web DM attribution order:
+       * 1) Incoming messages: interactive bubble wrapper uses role="button" (see IG DOM).
+       * 2) Else geometry vs [role=main] midline (seller ≈ outgoing side).
+       * 3) Else flex / viewport fallbacks.
        */
       let flexEndDepth = -1;
       let flexStartDepth = -1;
@@ -180,6 +208,11 @@ function harvestVisibleMessages() {
       let role = "unknown";
       let layoutSource = "none";
 
+      if (igRowLooksLikeIncomingBuyer(el)) {
+        role = "buyer";
+        layoutSource = "ig-incoming-role-button";
+      }
+
       let mainRect = mainRectForFilter;
       let direction = "ltr";
       try {
@@ -190,7 +223,7 @@ function harvestVisibleMessages() {
       }
 
       const isRtl = direction === "rtl";
-      if (bubbleRect && mainRect.width > 80) {
+      if (role === "unknown" && bubbleRect && mainRect.width > 80) {
         const threadMid = mainRect.left + mainRect.width / 2;
         const cx = bubbleRect.left + bubbleRect.width / 2;
         const slack = Math.max(10, Math.min(44, mainRect.width * 0.065));
@@ -242,7 +275,10 @@ function harvestVisibleMessages() {
       /** @type {string[]} */
       const attribution_signals = [];
       let attribution_confidence = 0.41;
-      if (layoutSource === "geometry-thread" || layoutSource === "geometry-thread-rtl") {
+      if (layoutSource === "ig-incoming-role-button") {
+        attribution_confidence = 0.91;
+        attribution_signals.push("ig-incoming-role-button");
+      } else if (layoutSource === "geometry-thread" || layoutSource === "geometry-thread-rtl") {
         attribution_confidence = 0.88;
         attribution_signals.push(layoutSource);
       } else if (layoutSource === "geometry-viewport") {

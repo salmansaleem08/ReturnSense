@@ -18,7 +18,9 @@ OVERVIEW
 
 EXTENSION ATTRIBUTION (extension/content.js — harvestVisibleMessages)
 -----------------------------------------------------------------------
-• Primary: compare message bubble center X to the center of `[role=main]` (the DM column), not
+• First: if `[role="row"]` contains a sufficiently large `role="button"` wrapper (Instagram incoming /
+  counterparty bubble), classify as **buyer** (`ig-incoming-role-button`).
+• Then: compare message bubble center X to the center of `[role=main]` (the DM column), not
   `window.innerWidth/2` (Instagram’s thread is a narrow column; viewport mid misclassifies everything).
 • Bubble box: `rsPickMessageBubbleRect` — widest `div[dir=auto]` in the row (full-width row rects are ignored).
 • LTR: center right of thread mid → seller (you); left → buyer. RTL: mirrored.
