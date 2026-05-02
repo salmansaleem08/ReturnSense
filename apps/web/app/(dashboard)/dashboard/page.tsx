@@ -69,8 +69,8 @@ export default function DashboardPage() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="mb-4 text-lg font-semibold text-slate-900">Recent Buyer Analyses</h2>
+      <section className="rounded-[var(--radius-md)] border border-border bg-card p-5 shadow-none">
+        <h2 className="mb-4 text-base font-semibold text-foreground">Recent buyer analyses</h2>
         <Table>
           <TableHeader>
             <TableRow>
@@ -96,7 +96,7 @@ export default function DashboardPage() {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-slate-500">
+                <TableCell colSpan={4} className="text-center text-muted-foreground">
                   No analyses yet.
                 </TableCell>
               </TableRow>
@@ -105,9 +105,9 @@ export default function DashboardPage() {
         </Table>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="mb-3 text-lg font-semibold text-slate-900">How to Use Extension</h2>
-        <ol className="list-decimal space-y-2 pl-5 text-sm text-slate-700">
+      <section className="rounded-[var(--radius-md)] border border-border bg-card p-5">
+        <h2 className="mb-3 text-base font-semibold text-foreground">How to use the extension</h2>
+        <ol className="list-decimal space-y-2 pl-5 text-sm text-foreground/90">
           <li>Open Instagram DM and click <strong>Analyze Buyer</strong>.</li>
           <li>Add phone and address details in the side panel.</li>
           <li>Run analysis and review trust score before confirming COD order.</li>

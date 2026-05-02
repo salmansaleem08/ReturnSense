@@ -8,13 +8,13 @@ interface StatsCardProps {
 
 export function StatsCard({ title, value, helper }: StatsCardProps) {
   return (
-    <Card className="border-slate-200">
+    <Card className="rounded-[var(--radius-md)] border-border shadow-none">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-slate-500">{title}</CardTitle>
+        <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="text-3xl font-semibold tracking-tight text-slate-900">{value}</p>
-        {helper ? <p className="mt-1 text-xs text-slate-500">{helper}</p> : null}
+        <p className="text-3xl font-semibold tracking-tight text-foreground">{value}</p>
+        {helper ? <p className="mt-1 text-xs text-muted-foreground">{helper}</p> : null}
       </CardContent>
     </Card>
   );

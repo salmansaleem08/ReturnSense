@@ -1,70 +1,75 @@
 export default function HomePage() {
   return (
-    <div className="mx-auto grid max-w-6xl gap-12 px-4 py-12">
-      <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-10 text-center shadow-sm">
-        <h1 className="text-4xl font-bold tracking-tight text-slate-900 md:text-5xl">
+    <div className="mx-auto grid max-w-ig gap-10 px-4 py-12 md:gap-14">
+      <section className="rounded-[var(--radius-lg)] border border-border bg-card px-6 py-10 text-center shadow-ig md:px-10 dark:shadow-ig-dark">
+        <h1 className="text-[22px] font-semibold leading-tight tracking-tight text-foreground md:text-3xl">
           Stop losing money to fake COD orders
         </h1>
-        <p className="mx-auto mt-4 max-w-2xl text-lg text-slate-600">
-          ReturnSense analyzes buyer chat behavior, validates phone and address quality, and gives
-          a trust score before you dispatch.
+        <p className="mx-auto mt-4 max-w-feed text-sm leading-[18px] text-muted-foreground md:text-base md:leading-snug">
+          ReturnSense analyzes buyer chat behavior, validates phone and address quality, and gives a trust score
+          before you dispatch.
         </p>
         <a
           href="/login"
-          className="mt-8 inline-flex rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white"
+          className="mt-8 inline-flex h-8 items-center justify-center rounded-[var(--radius-sm)] bg-[hsl(var(--primary))] px-4 text-sm font-semibold text-[hsl(var(--primary-foreground))] transition-colors hover:bg-[hsl(var(--primary-hover))]"
         >
-          Get Started Free
+          Get started free
         </a>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-3 md:grid-cols-3 md:gap-2">
         {[
           {
-            title: "AI Conversation Analysis",
+            title: "AI conversation analysis",
             body: "Detect hesitation, evasion, and commitment signals directly from Instagram chat."
           },
           {
-            title: "Phone Validation",
+            title: "Phone validation",
             body: "Verify line validity, carrier quality, and VoIP risk to prevent fake orders."
           },
           {
-            title: "Address Verification",
+            title: "Address verification",
             body: "Validate delivery addresses with map precision and quality scoring before shipping."
           }
         ].map((feature) => (
-          <div key={feature.title} className="rounded-2xl border border-slate-200 bg-white p-5">
-            <h3 className="text-lg font-semibold text-slate-900">{feature.title}</h3>
-            <p className="mt-2 text-sm text-slate-600">{feature.body}</p>
+          <div
+            key={feature.title}
+            className="rounded-[var(--radius-md)] border border-border bg-card p-4 shadow-none"
+          >
+            <h3 className="text-sm font-semibold text-foreground">{feature.title}</h3>
+            <p className="mt-2 text-sm leading-[18px] text-muted-foreground">{feature.body}</p>
           </div>
         ))}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
-        <h2 className="text-2xl font-semibold text-slate-900">How it works</h2>
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
+      <section className="rounded-[var(--radius-md)] border border-border bg-card p-6">
+        <h2 className="text-base font-semibold text-foreground">How it works</h2>
+        <div className="mt-4 grid gap-3 md:grid-cols-3 md:gap-2">
           {[
-            "Analyze buyer chat from Instagram extension",
+            "Analyze buyer chat from the Instagram extension",
             "Get a transparent trust score with risk signals",
-            "Decide confidently before dispatching COD parcel"
+            "Decide confidently before dispatching COD"
           ].map((step, idx) => (
-            <div key={step} className="rounded-xl bg-slate-50 p-4">
-              <p className="text-xs font-semibold text-slate-500">STEP {idx + 1}</p>
-              <p className="mt-1 text-sm text-slate-700">{step}</p>
+            <div key={step} className="rounded-[var(--radius-sm)] bg-muted/80 p-4 dark:bg-muted/50">
+              <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Step {idx + 1}
+              </p>
+              <p className="mt-1 text-sm leading-[18px] text-foreground">{step}</p>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-3 md:grid-cols-3 md:gap-2">
         {[
           { name: "Free", price: "20 analyses / month", amount: "$0" },
           { name: "Pro", price: "Unlimited analyses", amount: "$15/mo" },
           { name: "Agency", price: "Team workflows + volume", amount: "$49/mo" }
         ].map((plan) => (
-          <div key={plan.name} className="rounded-2xl border border-slate-200 bg-white p-5">
-            <p className="text-sm font-semibold text-slate-500">{plan.name}</p>
-            <p className="mt-1 text-3xl font-bold text-slate-900">{plan.amount}</p>
-            <p className="mt-2 text-sm text-slate-600">{plan.price}</p>
+          <div key={plan.name} className="rounded-[var(--radius-md)] border border-border bg-card p-5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{plan.name}</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{plan.amount}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{plan.price}</p>
           </div>
         ))}
       </section>

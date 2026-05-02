@@ -5,7 +5,11 @@ import { cn } from "@/lib/utils";
 import { validateEnv } from "@/lib/env";
 import { Toaster } from "@/components/ui/toaster";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap"
+});
 
 export const metadata: Metadata = {
   title: "ReturnSense",
@@ -18,8 +22,8 @@ export default function RootLayout({
   validateEnv();
 
   return (
-    <html lang="en" className={cn("font-sans", inter.variable)}>
-      <body>
+    <html lang="en" className={cn("font-sans", inter.variable)} suppressHydrationWarning>
+      <body className="font-sans">
         {children}
         <Toaster />
       </body>

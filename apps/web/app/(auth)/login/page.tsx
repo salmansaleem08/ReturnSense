@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, ShieldCheck } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -61,42 +61,56 @@ export default function LoginPage() {
   }
 
   return (
-    <Card className="w-full max-w-md border-slate-200 shadow-xl shadow-slate-200/70">
+    <Card className="w-full max-w-[400px] rounded-[var(--radius-lg)] border border-border bg-card shadow-ig dark:shadow-ig-dark">
       <CardHeader className="space-y-4 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-slate-900 text-white">
-          <ShieldCheck className="h-6 w-6" />
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-[#FCAF45] via-[#E1306C] to-[#833AB4] text-lg font-bold text-white">
+          RS
         </div>
         <div>
-          <CardTitle className="text-2xl">ReturnSense</CardTitle>
-          <CardDescription>Sign in to manage buyer risk intelligence.</CardDescription>
+          <CardTitle className="text-base font-semibold leading-snug">ReturnSense</CardTitle>
+          <CardDescription className="text-sm text-muted-foreground">
+            Sign in to manage buyer risk intelligence.
+          </CardDescription>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Button onClick={handleGoogle} className="w-full" disabled={pendingGoogle}>
+        <Button
+          onClick={handleGoogle}
+          className="h-8 w-full rounded-[var(--radius-sm)] font-semibold"
+          disabled={pendingGoogle}
+        >
           {pendingGoogle ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           Sign in with Google
         </Button>
 
         <Tabs defaultValue="email" className="w-full">
-          <TabsList className="grid w-full grid-cols-1">
-            <TabsTrigger value="email">Sign in with Email</TabsTrigger>
+          <TabsList className="grid h-9 w-full grid-cols-1 rounded-[var(--radius-sm)] bg-muted p-1">
+            <TabsTrigger value="email" className="rounded-[var(--radius-xs)] font-semibold">
+              Email
+            </TabsTrigger>
           </TabsList>
-          <TabsContent value="email" className="space-y-3 pt-2">
+          <TabsContent value="email" className="space-y-3 pt-3">
             <Input
               type="email"
               placeholder="you@company.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              className="h-10"
             />
-            <Button onClick={handleOtp} disabled={pendingOtp || !email} variant="secondary" className="w-full">
+            <Button
+              onClick={handleOtp}
+              disabled={pendingOtp || !email}
+              variant="secondary"
+              className="h-8 w-full rounded-[var(--radius-sm)] border border-border font-semibold"
+            >
               {pendingOtp ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Send OTP Link
             </Button>
           </TabsContent>
         </Tabs>
 
-        {message ? <p className="text-sm text-emerald-600">{message}</p> : null}
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {message ? <p className="text-center text-sm text-[hsl(var(--primary))]">{message}</p> : null}
+        {error ? <p className="text-center text-sm text-destructive">{error}</p> : null}
       </CardContent>
     </Card>
   );
