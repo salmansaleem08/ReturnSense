@@ -5,6 +5,11 @@ ReturnSense — Analysis pipeline (reference; matches repo code as of last updat
 SECTION A — PIPELINE AS IMPLEMENTED IN CODE
 ================================================================================
 
+LOGO
+----
+• Web: `apps/web/public/shopping-bag.png` served as `/shopping-bag.png`.
+• Extension: same bytes at `extension/icons/shopping-bag.png` (Chrome manifest + popup + content panel).
+
 OVERVIEW
 --------
 1. Extension collects DM messages (scroll-capture or visible), assigns role + attribution_confidence per line, POSTs to /api/analyze.

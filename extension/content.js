@@ -2,7 +2,7 @@ const API_BASE = "https://return-sense-web.vercel.app";
 
 const RS_BRAND_LOGO =
   typeof chrome !== "undefined" && chrome.runtime?.getURL
-    ? chrome.runtime.getURL("icons/brand-mark.svg")
+    ? chrome.runtime.getURL("icons/shopping-bag.png")
     : "";
 
 function isInstagramHost() {

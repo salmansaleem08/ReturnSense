@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   title: "ReturnSense",
   description: "Scalable return intelligence platform",
   icons: {
-    icon: "/brand-mark.svg"
+    icon: "/shopping-bag.png"
   }
 };
 

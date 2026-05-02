@@ -76,7 +76,7 @@ export function DashboardShell({ children, email, plan }: DashboardShellProps) {
       <header className="sticky top-0 z-40 flex h-[52px] items-center justify-between border-b border-border bg-background px-4 md:hidden">
         <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand-mark.svg" alt="" width={32} height={32} className="h-8 w-8 rounded-md" />
+          <img src="/shopping-bag.png" alt="" width={32} height={32} className="h-8 w-8 rounded-md" />
           ReturnSense
         </Link>
         <Button
@@ -99,7 +99,7 @@ export function DashboardShell({ children, email, plan }: DashboardShellProps) {
         <div className="flex h-[52px] shrink-0 items-center px-6 pt-4">
           <Link href="/dashboard" className="flex items-center gap-2 text-xl font-semibold tracking-tight">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand-mark.svg" alt="" width={36} height={36} className="h-9 w-9 rounded-md" />
+            <img src="/shopping-bag.png" alt="" width={36} height={36} className="h-9 w-9 rounded-md" />
             <span className="hidden lg:inline">ReturnSense</span>
           </Link>
         </div>
