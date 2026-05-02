@@ -1,74 +1,123 @@
-const root = document.getElementById("popup-root");
+/* global RS_POPUP_CONFIG */
 
-function getStored(keys) {
-  return new Promise((resolve) => chrome.storage.local.get(keys, resolve));
-}
+const cfg = typeof window !== "undefined" && window.RS_POPUP_CONFIG ? window.RS_POPUP_CONFIG : {};
+const SUPABASE_URL = cfg.SUPABASE_URL || "";
+const SUPABASE_ANON_KEY = cfg.SUPABASE_ANON_KEY || "";
+const APP_URL = cfg.APP_URL || "https://return-sense-web.vercel.app";
 
-function setStored(values) {
-  return new Promise((resolve) => chrome.storage.local.set(values, resolve));
-}
-
-function removeStored(keys) {
-  return new Promise((resolve) => chrome.storage.local.remove(keys, resolve));
-}
-
-function setMessage(message, tone = "info") {
-  const color = tone === "error" ? "#b91c1c" : tone === "success" ? "#166534" : "#334155";
-  const msg = document.createElement("p");
-  msg.textContent = message;
-  msg.style.margin = "0";
-  msg.style.fontSize = "12px";
-  msg.style.color = color;
-  root.appendChild(msg);
-}
-
-function renderDisconnected() {
-  root.innerHTML = `
-    <div class="rs-popup-card">
-      <p class="rs-popup-help">Paste your extension token from dashboard settings to connect this browser.</p>
-      <input id="rs-token-input" class="rs-popup-input" placeholder="Paste access token" />
-      <input id="rs-email-input" class="rs-popup-input" placeholder="Seller email (optional)" />
-      <button id="rs-save-token" class="rs-popup-button rs-popup-button-primary">Save Token</button>
-    </div>
-  `;
-
-  document.getElementById("rs-save-token").addEventListener("click", async () => {
-    const token = document.getElementById("rs-token-input").value.trim();
-    const email = document.getElementById("rs-email-input").value.trim();
-    if (!token) {
-      setMessage("Token is required.", "error");
+document.addEventListener("DOMContentLoaded", () => {
+  chrome.runtime.sendMessage({ type: "RS_GET_SESSION" }, (result) => {
+    if (chrome.runtime.lastError) {
+      showLoginForm();
       return;
     }
-    await setStored({ rs_auth_token: token, rs_seller_email: email || "Seller" });
-    await initializePopup();
-    setMessage("Token saved successfully.", "success");
+    if (result?.session?.access_token) {
+      showLoggedIn(result.user);
+    } else {
+      showLoginForm();
+    }
   });
-}
+});
 
-function renderConnected(email) {
+function showLoginForm() {
+  const root = document.getElementById("popup-body");
+  if (!root) return;
+
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    root.innerHTML = `
+      <p class="config-hint">Configure <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> in <code>extension/popup-config.js</code> (copy from apps/web <code>.env.local</code>).</p>
+      <p class="status" style="margin-top:12px;">
+        <a href="${APP_URL}/login" target="_blank" rel="noreferrer" class="link">Open dashboard login</a>
+      </p>
+    `;
+    return;
+  }
+
   root.innerHTML = `
-    <div class="rs-popup-card">
-      <p class="rs-connected">Connected ✓</p>
-      <p class="rs-popup-help">Seller: ${email || "Seller"}</p>
-      <button id="rs-clear-token" class="rs-popup-button rs-popup-button-danger">Clear Token</button>
-    </div>
+    <input type="email" id="email" class="input" placeholder="Email address" autocomplete="email">
+    <input type="password" id="password" class="input" placeholder="Password" autocomplete="current-password">
+    <button id="login-btn" class="btn-primary">Log in</button>
+    <div id="error-msg" class="error"></div>
+    <p class="status" style="margin-top:16px;">
+      No account? <a href="${APP_URL}/signup" target="_blank" rel="noreferrer" class="link">Sign up</a>
+    </p>
   `;
 
-  document.getElementById("rs-clear-token").addEventListener("click", async () => {
-    await removeStored(["rs_auth_token", "rs_seller_email"]);
-    await initializePopup();
-    setMessage("Token cleared.", "success");
+  document.getElementById("login-btn").addEventListener("click", async () => {
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+    const btn = document.getElementById("login-btn");
+    const errEl = document.getElementById("error-msg");
+
+    if (!email || !password) {
+      errEl.textContent = "Enter email and password.";
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "Logging in...";
+    errEl.textContent = "";
+
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: SUPABASE_ANON_KEY
+        },
+        body: JSON.stringify({ email, password })
+      });
+
+      const data = await res.json();
+
+      if (data.error || !data.access_token) {
+        errEl.textContent = data.error_description || data.msg || data.error || "Login failed.";
+        btn.disabled = false;
+        btn.textContent = "Log in";
+        return;
+      }
+
+      const user = {
+        email: data.user?.email,
+        id: data.user?.id,
+        username: data.user?.user_metadata?.username
+      };
+      chrome.runtime.sendMessage({ type: "RS_LOGIN", session: data, user }, () => {
+        showLoggedIn(user);
+      });
+    } catch (_e) {
+      errEl.textContent = "Network error. Check connection.";
+      btn.disabled = false;
+      btn.textContent = "Log in";
+    }
   });
 }
 
-async function initializePopup() {
-  root.innerHTML = "";
-  const { rs_auth_token: token, rs_seller_email: email } = await getStored(["rs_auth_token", "rs_seller_email"]);
-  if (token) {
-    renderConnected(email);
-  } else {
-    renderDisconnected();
-  }
+function showLoggedIn(user) {
+  const root = document.getElementById("popup-body");
+  if (!root) return;
+
+  root.innerHTML = `
+    <div class="user-info">
+      <div class="username">${escapeHtml(user?.username || user?.email?.split("@")[0] || "User")}</div>
+      <div class="email">${escapeHtml(user?.email || "")}</div>
+    </div>
+    <p class="status">Extension is active on Instagram.</p>
+    <a href="${APP_URL}/dashboard" target="_blank" rel="noreferrer" class="btn-primary" style="display:block;text-align:center;margin-top:12px;text-decoration:none;">
+      Open Dashboard
+    </a>
+    <button id="logout-btn" class="btn-secondary">Sign out</button>
+  `;
+
+  document.getElementById("logout-btn").addEventListener("click", () => {
+    chrome.runtime.sendMessage({ type: "RS_LOGOUT" }, () => showLoginForm());
+  });
 }
 
-initializePopup();
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}

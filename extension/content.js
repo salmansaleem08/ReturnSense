@@ -150,28 +150,24 @@ function showScrollPromptBanner(username) {
 
   const banner = document.createElement("div");
   banner.id = "rs-scroll-banner";
-  banner.style.cssText =
-    "position:fixed;top:0;left:0;right:0;z-index:2147483646;background:linear-gradient(135deg,#1E40AF,#1D4ED8);color:white;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;box-shadow:0 4px 20px rgba(0,0,0,0.3);flex-wrap:wrap;";
-
   banner.innerHTML = `
     <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;">
-      <span style="font-size:22px;">🛡</span>
       <div>
-        <div style="font-weight:700;font-size:14px;">ReturnSense — Capturing Chat</div>
-        <div style="font-size:12px;opacity:0.85;margin-top:2px;">
-          👆 <strong>Scroll UP through the entire chat</strong> to capture all messages, then press Done
+        <div style="font-weight:600;font-size:13px;">ReturnSense — capturing chat</div>
+        <div style="font-size:11px;opacity:0.85;margin-top:2px;">
+          Scroll up through the entire thread to capture messages, then tap Done
         </div>
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
-      <span id="rs-capture-counter" style="font-size:12px;opacity:0.75;background:rgba(255,255,255,0.15);padding:4px 10px;border-radius:99px;">0 messages captured</span>
-      <button type="button" id="rs-capture-done" style="background:white;color:#1E40AF;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">✓ Done — Analyze</button>
-      <button type="button" id="rs-capture-cancel" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;font-family:inherit;">✕</button>
+      <span id="rs-capture-counter">0 messages captured</span>
+      <button type="button" id="rs-capture-done">Done — Analyze</button>
+      <button type="button" class="rs-scroll-cancel" id="rs-capture-cancel" aria-label="Cancel">Cancel</button>
     </div>
   `;
 
   document.body.appendChild(banner);
-  document.body.style.paddingTop = "68px";
+  document.body.style.paddingTop = "52px";
 
   const doneBtn = document.getElementById("rs-capture-done");
   const cancelBtn = document.getElementById("rs-capture-cancel");
@@ -676,8 +672,11 @@ function showExtractionLoadingPanel() {
   panel.id = "rs-panel";
   panel.innerHTML = `
     <div id="rs-panel-header">
-      <span>🛡 ReturnSense</span>
-      <button type="button" class="rs-close-btn" id="rs-close-extract" aria-label="Close">×</button>
+      <div class="rs-header-logo">
+        <div class="rs-logo-mark">R</div>
+        <span class="rs-header-title">ReturnSense</span>
+      </div>
+      <button type="button" class="rs-close-btn" id="rs-close-extract" aria-label="Close">&#x2715;</button>
     </div>
     <div id="rs-panel-body">
       <p id="rs-loading-status" style="color:#6B7280;font-size:12px;margin:0;">Reading chat... (attempt 1/8)</p>
@@ -713,10 +712,10 @@ function openAnalysisPanel(username, messages, detectedPhone, detectedAddress) {
   const phoneVal = escapeHtml(phoneDet ?? "");
   const addrEscaped = escapeHtml(addrDet ?? "");
 
-  const phoneAutoStyle = phoneDet ? "color:#16a34a;" : "color:#9CA3AF;";
-  const addrAutoStyle = addrDet ? "color:#16a34a;" : "color:#9CA3AF;";
-  const phoneAutoText = phoneDet ? "✓ Auto-detected from chat" : "Not detected — enter manually";
-  const addrAutoText = addrDet ? "✓ Auto-detected from chat" : "Not detected — enter manually";
+  const phoneAutoClass = phoneDet ? "rs-auto-label detected" : "rs-auto-label";
+  const addrAutoClass = addrDet ? "rs-auto-label detected" : "rs-auto-label";
+  const phoneAutoText = phoneDet ? "Auto-detected" : "Not detected";
+  const addrAutoText = addrDet ? "Auto-detected" : "Not detected";
 
   closePanel();
   applyInstagramMainMargin();
@@ -725,19 +724,22 @@ function openAnalysisPanel(username, messages, detectedPhone, detectedAddress) {
   panel.id = "rs-panel";
   panel.innerHTML = `
     <div id="rs-panel-header">
-      <span>🛡 ReturnSense</span>
-      <button type="button" class="rs-close-btn" id="rs-close-panel" aria-label="Close">×</button>
+      <div class="rs-header-logo">
+        <div class="rs-logo-mark">R</div>
+        <span class="rs-header-title">ReturnSense</span>
+      </div>
+      <button type="button" class="rs-close-btn" id="rs-close-panel" aria-label="Close">&#x2715;</button>
     </div>
     <div id="rs-panel-body">
       <div class="rs-card">
         <div class="rs-card-body">
-          <div style="color:#6B7280;font-size:12px;margin-bottom:10px;">Analyzing buyer: <strong style="color:#1E40AF;">@${safeUser}</strong></div>
-          <label style="display:block;font-weight:600;color:#374151;font-size:13px;">📱 Phone Number</label>
+          <div class="rs-buyer-line">Analyzing buyer: <strong>@${safeUser}</strong></div>
+          <label style="display:block;font-weight:600;color:#262626;font-size:13px;">Phone Number</label>
           <input id="rs-phone" class="rs-input" type="text" value="${phoneVal}" autocomplete="off" />
-          <div class="rs-auto-label" style="${phoneAutoStyle}">${phoneAutoText}</div>
-          <label style="display:block;margin-top:10px;font-weight:600;color:#374151;font-size:13px;">📍 Delivery Address</label>
+          <div class="${phoneAutoClass}">${phoneAutoText}</div>
+          <label style="display:block;margin-top:10px;font-weight:600;color:#262626;font-size:13px;">Delivery Address</label>
           <textarea id="rs-address" class="rs-input" rows="3">${addrEscaped}</textarea>
-          <div class="rs-auto-label" style="${addrAutoStyle}">${addrAutoText}</div>
+          <div class="${addrAutoClass}">${addrAutoText}</div>
           ${scrollWarn}
           <button type="button" id="rs-submit" class="rs-action-btn rs-btn-primary" style="margin-top:10px;">Run Analysis</button>
         </div>
@@ -772,9 +774,34 @@ function launchBuyerAnalysis() {
   startCaptureMode(username);
 }
 
+function showLoginRequired() {
+  const body = document.getElementById("rs-panel-body");
+  if (!body) return;
+  body.innerHTML = `
+    <div class="rs-card">
+      <div class="rs-card-body">
+        <p class="rs-section-label" style="text-transform:none;letter-spacing:0;">Sign in required</p>
+        <p style="font-size:13px;color:#737373;line-height:1.5;margin-bottom:12px;">
+          Log in from the ReturnSense extension popup, or open the dashboard to create an account.
+        </p>
+        <a href="${API_BASE}/login" target="_blank" rel="noreferrer" class="rs-action-btn rs-btn-primary" style="display:block;text-align:center;text-decoration:none;">
+          Open log in
+        </a>
+      </div>
+    </div>`;
+}
+
 function getTokenFromBackground() {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type: "GET_TOKEN" }, (response) => resolve(response || {}));
+    chrome.runtime.sendMessage({ type: "RS_GET_SESSION" }, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve({ token: null, email: null, user: null });
+        return;
+      }
+      const session = response?.session;
+      const token = session?.access_token ?? response?.token ?? null;
+      resolve({ token, email: response?.email ?? null, user: response?.user ?? null });
+    });
   });
 }
 
@@ -809,10 +836,7 @@ async function submitForAnalysis({ messages, username, phone, address }) {
   const token = authData?.token;
 
   if (!token) {
-    const body = document.getElementById("rs-panel-body");
-    if (body) {
-      body.innerHTML = `<p style="color:#b91c1c;font-size:13px;padding:12px;">Please set up your token in the extension popup first.</p>`;
-    }
+    showLoginRequired();
     return;
   }
 
@@ -879,7 +903,7 @@ function displayResult(result) {
   const scoreRaw = result?.trust_score;
   const score = typeof scoreRaw === "number" && !Number.isNaN(scoreRaw) ? scoreRaw : 0;
   const riskColor =
-    score >= 75 ? "#16a34a" : score >= 55 ? "#ca8a04" : score >= 35 ? "#ea580c" : "#dc2626";
+    score >= 75 ? "#1D9A0B" : score >= 55 ? "#D4A017" : score >= 35 ? "#E8490F" : "#ED4956";
 
   const riskKey = String(result?.risk_level ?? "critical").toLowerCase();
   const riskLabel =
@@ -900,37 +924,35 @@ function displayResult(result) {
       ? result.conversation_summary
       : "";
   const summaryHtml = convSummary
-    ? `<div style="font-size:11px;color:#6B7280;text-align:center;padding:4px 10px 10px;border-top:1px solid #F3F4F6;margin-top:6px;">📝 ${escapeHtml(
+    ? `<div style="font-size:11px;color:#737373;text-align:center;padding:4px 10px 10px;border-top:1px solid #EFEFEF;margin-top:6px;">${escapeHtml(
         convSummary
       )}</div>`
     : "";
   const msgCount =
     typeof result?.message_count === "number" && !Number.isNaN(result.message_count) ? result.message_count : 0;
-  const msgCountHtml = `<div style="font-size:10px;color:#D1D5DB;text-align:center;padding-bottom:8px;">Analyzed ${msgCount} message${
+  const msgCountHtml = `<div class="rs-msg-count">Analyzed ${msgCount} message${
     msgCount === 1 ? "" : "s"
   } from conversation</div>`;
 
   const quickFacts = [];
-  if (result?.commitment_confirmed === true) quickFacts.push("✅ Order confirmed");
-  if (result?.shared_phone_proactively === true) quickFacts.push("✅ Phone shared proactively");
-  if (result?.shared_address_proactively === true) quickFacts.push("✅ Address shared proactively");
-  if (result?.hesitation_detected === true) quickFacts.push("⚠️ Hesitation detected");
-  if (result?.asked_about_returns === true) quickFacts.push("🔴 Asked about returns");
-  if (result?.excessive_bargaining === true) quickFacts.push("🔴 Excessive bargaining");
+  if (result?.commitment_confirmed === true)
+    quickFacts.push(`<span class="rs-quick-fact positive">Order confirmed</span>`);
+  if (result?.shared_phone_proactively === true)
+    quickFacts.push(`<span class="rs-quick-fact positive">Phone shared proactively</span>`);
+  if (result?.shared_address_proactively === true)
+    quickFacts.push(`<span class="rs-quick-fact positive">Address shared proactively</span>`);
+  if (result?.hesitation_detected === true)
+    quickFacts.push(`<span class="rs-quick-fact negative">Hesitation detected</span>`);
+  if (result?.asked_about_returns === true)
+    quickFacts.push(`<span class="rs-quick-fact negative">Asked about returns</span>`);
+  if (result?.excessive_bargaining === true)
+    quickFacts.push(`<span class="rs-quick-fact negative">Excessive bargaining</span>`);
   const quickFactsHtml =
     quickFacts.length > 0
-      ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #F3F4F6;">${quickFacts
-          .map(
-            (f) =>
-              `<span style="font-size:11px;font-weight:600;background:#F3F4F6;color:#374151;padding:3px 8px;border-radius:99px;">${escapeHtml(
-                f
-              )}</span>`
-          )
-          .join("")}</div>`
+      ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #EFEFEF;">${quickFacts.join(
+          ""
+        )}</div>`
       : "";
-
-  const circumference = 2 * Math.PI * 46;
-  const dashOffset = circumference * (1 - Math.min(100, Math.max(0, score)) / 100);
 
   const phone = result?.phone_analysis;
   const address = result?.address_analysis;
@@ -953,10 +975,10 @@ function displayResult(result) {
     );
     const valid = Boolean(phone.phone_valid);
     const statusHtml = valid
-      ? `<span style="color:#16a34a;font-weight:600;">✅ Valid Active Number</span>`
-      : `<span style="color:#dc2626;font-weight:600;">❌ Invalid or Inactive</span>`;
+      ? `<span class="rs-status-valid">Valid — Active</span>`
+      : `<span class="rs-status-invalid">Invalid</span>`;
     const typeStr = escapeHtml(String(phone.phone_type ?? "Unknown"));
-    const typeExtra = phone.phone_is_voip ? ` <span style="color:#dc2626;">⚠️ VoIP</span>` : "";
+    const typeExtra = phone.phone_is_voip ? ` <span class="rs-status-warning">VoIP</span>` : "";
     const carrier = escapeHtml(String(phone.phone_carrier ?? "Unknown"));
     const country = escapeHtml(String(phone.phone_country ?? "Unknown"));
     phoneBlock = `
@@ -965,7 +987,7 @@ function displayResult(result) {
       <div class="rs-row"><span class="rs-row-label">Type</span><span class="rs-row-value">${typeStr}${typeExtra}</span></div>
       <div class="rs-row"><span class="rs-row-label">Carrier</span><span class="rs-row-value">${carrier}</span></div>
       <div class="rs-row"><span class="rs-row-label">Country</span><span class="rs-row-value">${country}</span></div>
-      ${phone.phone_is_voip ? `<div class="rs-voip-warning">⚠️ HIGH RISK — VoIP numbers are commonly used for fake orders. Consider requesting an alternate contact.</div>` : ""}`;
+      ${phone.phone_is_voip ? `<div class="rs-voip-warning">HIGH RISK — VoIP numbers are commonly used for fake orders. Consider requesting an alternate contact.</div>` : ""}`;
   }
 
   let addressBlock = "";
@@ -979,11 +1001,11 @@ function displayResult(result) {
     addressBlock = `<p style="color:#6B7280;font-size:13px;">Address could not be located on map. Try resubmitting with a more specific address including street number and city name.</p>`;
   } else {
     const q = typeof address.address_quality_score === "number" ? address.address_quality_score : 0;
-    const barColor = q > 70 ? "#16a34a" : q > 40 ? "#ca8a04" : "#dc2626";
+    const barColor = q > 70 ? "#1D9A0B" : q > 40 ? "#D4A017" : "#ED4956";
     const prec = String(address.address_precision ?? "");
     let precLabel = "Approximate street";
-    if (prec === "ROOFTOP") precLabel = "Exact location ✅";
-    else if (prec === "APPROXIMATE") precLabel = "⚠️ Area only — imprecise";
+    if (prec === "ROOFTOP") precLabel = "Exact location";
+    else if (prec === "APPROXIMATE") precLabel = "Area only — imprecise";
     const qualWord =
       q > 85 ? "Excellent" : q > 60 ? "Good" : q > 30 ? "Fair — may cause delivery issues" : "Poor — too vague";
     const lat = address.address_lat;
@@ -1006,32 +1028,32 @@ function displayResult(result) {
   const neg = Array.isArray(result?.negative_signals) ? result.negative_signals : [];
   const posHtml =
     pos.length > 0
-      ? pos.map((s) => `<span class="rs-badge-green">${escapeHtml(String(s))}</span>`).join("")
-      : `<span style="color:#9CA3AF;font-size:12px;">None detected</span>`;
+      ? pos.map((s) => `<span class="rs-badge-positive">${escapeHtml(String(s))}</span>`).join("")
+      : `<span style="color:#8E8E8E;font-size:12px;">None detected</span>`;
   const negHtml =
     neg.length > 0
-      ? neg.map((s) => `<span class="rs-badge-red">${escapeHtml(String(s))}</span>`).join("")
-      : `<span style="color:#9CA3AF;font-size:12px;">None detected</span>`;
+      ? neg.map((s) => `<span class="rs-badge-negative">${escapeHtml(String(s))}</span>`).join("")
+      : `<span style="color:#8E8E8E;font-size:12px;">None detected</span>`;
 
   const ser = escapeHtml(String(result?.buyer_seriousness ?? "—"));
   const committed = result?.commitment_confirmed === true;
   const commQ = escapeHtml(String(result?.communication_quality ?? "—"));
   const reasons = Array.isArray(result?.ai_reasons) ? result.ai_reasons : [];
   const reasonsHtml = reasons
-    .map((r) => `<div style="border-bottom:1px solid #F3F4F6;padding:6px 0;color:#374151;font-size:13px;">• ${escapeHtml(String(r))}</div>`)
+    .map((r) => `<div class="rs-reason-item">${escapeHtml(String(r))}</div>`)
     .join("");
 
   const recRaw = String(result?.recommendation ?? "caution").toLowerCase();
-  let recColor = "#ca8a04";
+  let recColor = "#D4A017";
   let recText = "USE CAUTION";
   if (recRaw === "proceed") {
-    recColor = "#16a34a";
+    recColor = "#1D9A0B";
     recText = "PROCEED WITH ORDER";
   } else if (recRaw === "hold") {
-    recColor = "#ea580c";
+    recColor = "#E8490F";
     recText = "HOLD ORDER";
   } else if (recRaw === "reject") {
-    recColor = "#dc2626";
+    recColor = "#ED4956";
     recText = "REJECT ORDER";
   }
   const recBg = `${recColor}26`;
@@ -1039,8 +1061,8 @@ function displayResult(result) {
   const hist = Array.isArray(result?.historical_data) ? result.historical_data : [];
   let histHtml = "";
   if (!hist.length) {
-    histHtml = `<p style="font-size:13px;color:#374151;margin:0;">No prior records found for this buyer in the ReturnSense network.</p>
-      <p style="color:#16a34a;font-size:13px;margin:8px 0 0;">✅ No red flags from history.</p>`;
+    histHtml = `<p style="font-size:13px;color:#262626;margin:0;">No prior records found for this buyer in the ReturnSense network.</p>
+      <p class="rs-status-valid" style="font-size:13px;margin:8px 0 0;">No negative signals in prior history.</p>`;
   } else {
     const rows = hist
       .map((row) => {
@@ -1067,18 +1089,11 @@ function displayResult(result) {
   const buyerIdDisp = escapeHtml(String(result?.buyer_id ?? "—"));
 
   body.innerHTML = `
-    <div class="rs-card" style="border-top:3px solid ${riskColor};">
+    <div class="rs-card">
       <div class="rs-card-body">
         <div class="rs-score-wrap">
-          <svg class="rs-score-svg" viewBox="0 0 120 120" aria-hidden="true">
-            <circle cx="60" cy="60" r="46" fill="none" stroke="#F3F4F6" stroke-width="10" />
-            <circle cx="60" cy="60" r="46" fill="none" stroke="${riskColor}" stroke-width="10" stroke-linecap="round"
-              stroke-dasharray="${circumference}"
-              stroke-dashoffset="${dashOffset}"
-              transform="rotate(-90 60 60)" />
-            <text x="60" y="60" text-anchor="middle" dominant-baseline="central" fill="${riskColor}" font-size="26" font-weight="800">${score}</text>
-          </svg>
-          <span class="rs-risk-badge" style="background:${riskColor};">${riskLabel}</span>
+          <div class="rs-score-number" style="color:${riskColor}">${score}</div>
+          <span class="rs-risk-badge" style="background:${riskColor};color:#fff;">${riskLabel}</span>
           <div class="rs-analyst-notes">${escapeHtml(analystNotes)}</div>
           ${summaryHtml}
           ${msgCountHtml}
@@ -1087,32 +1102,32 @@ function displayResult(result) {
     </div>
 
     <div class="rs-card">
-      <div class="rs-card-header">📱 Phone Analysis</div>
+      <div class="rs-card-header">Phone Analysis</div>
       <div class="rs-card-body">${phoneBlock}</div>
     </div>
 
     <div class="rs-card">
-      <div class="rs-card-header">📍 Address Analysis</div>
+      <div class="rs-card-header">Address Analysis</div>
       <div class="rs-card-body">${addressBlock}</div>
     </div>
 
     <div class="rs-card">
-      <div class="rs-card-header">🤖 AI Behavioral Analysis</div>
+      <div class="rs-card-header">AI Behavioral Analysis</div>
       <div class="rs-card-body">
         ${quickFactsHtml}
         <div class="rs-signals-grid">
           <div>
-            <div class="rs-signals-col-title" style="color:#16a34a;">✅ Positive</div>
+            <div class="rs-signals-col-title">Positive</div>
             <div>${posHtml}</div>
           </div>
           <div>
-            <div class="rs-signals-col-title" style="color:#dc2626;">⚠️ Risks</div>
+            <div class="rs-signals-col-title">Risks</div>
             <div>${negHtml}</div>
           </div>
         </div>
         <div class="rs-stats-row">
           <span>Seriousness: ${ser}</span><span>·</span>
-          <span>Committed: ${committed ? "Yes ✅" : "No"}</span><span>·</span>
+          <span>Committed: ${committed ? "Confirmed" : "Not confirmed"}</span><span>·</span>
           <span>Communication: ${commQ}</span>
         </div>
         ${reasonsHtml}
@@ -1121,15 +1136,15 @@ function displayResult(result) {
     </div>
 
     <div class="rs-card">
-      <div class="rs-card-header">📋 Buyer History</div>
+      <div class="rs-card-header">Buyer History</div>
       <div class="rs-card-body">${histHtml}</div>
     </div>
 
     <div class="rs-card">
       <div class="rs-card-body">
-        <button type="button" class="rs-action-btn rs-btn-primary" id="rs-view-report">View Full Report →</button>
-        <button type="button" class="rs-action-btn rs-btn-secondary" id="rs-new-analysis">New Analysis</button>
-        <div style="text-align:center;color:#9CA3AF;font-size:11px;margin-top:4px;">Analysis ID: ${buyerIdDisp} | Powered by ReturnSense</div>
+        <button type="button" class="rs-action-btn rs-btn-primary" id="rs-view-report">View full report</button>
+        <button type="button" class="rs-action-btn rs-btn-secondary" id="rs-new-analysis">New analysis</button>
+        <div style="text-align:center;color:#8E8E8E;font-size:11px;margin-top:4px;">Analysis ID: ${buyerIdDisp} | Powered by ReturnSense</div>
       </div>
     </div>`;
 
@@ -1162,8 +1177,8 @@ function ensureFloatingAnalyzeButton() {
   const fab = document.createElement("button");
   fab.id = "rs-analyze-fab";
   fab.type = "button";
-  fab.className = "rs-fab";
-  fab.textContent = "🛡 Analyze";
+  fab.className = "rs-analyze-btn rs-fab";
+  fab.textContent = "Analyze";
   fab.title = "ReturnSense — analyze this chat";
   fab.setAttribute("aria-label", "ReturnSense analyze buyer");
   fab.addEventListener("click", () => void launchBuyerAnalysis());
@@ -1185,7 +1200,7 @@ function tryInjectButton() {
     btn.id = "rs-analyze-btn";
     btn.type = "button";
     btn.className = "rs-analyze-btn";
-    btn.textContent = "🛡 Analyze Buyer";
+    btn.textContent = "Analyze Buyer";
     btn.title = "ReturnSense — analyze this buyer";
     btn.addEventListener("click", () => void launchBuyerAnalysis());
     header.appendChild(btn);
