@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { LogoMark } from "@/components/brand/logo-mark";
 import { PageAmbientBg } from "@/components/layout/page-ambient";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -58,12 +59,10 @@ function VerifyEmailInner() {
           </Link>
         </div>
 
-        <div className="rs-logo-mark rs-logo-mark--lg mb-8 mt-[10vh]">R</div>
+        <LogoMark size={40} className="mb-8 mt-[10vh]" />
 
-        <div className="rs-card-elevated w-full max-w-md rounded-2xl border border-border p-8 text-center">
-          <h1 className="text-xl font-bold md:text-2xl">
-            <span className="rs-text-gradient">Check your email</span>
-          </h1>
+        <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 text-center">
+          <h1 className="text-xl font-semibold text-foreground md:text-2xl">Check your email</h1>
           <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
             We sent a link to <strong className="text-foreground">{email || "your email"}</strong>. Click it to activate your account.
           </p>
@@ -71,7 +70,7 @@ function VerifyEmailInner() {
             type="button"
             disabled={disabled}
             onClick={() => void resend()}
-            className="mt-6 w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+            className="mt-6 w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
           >
             {pending ? "Sending…" : cooldown > 0 ? `Resend email (${cooldown}s)` : "Resend email"}
           </button>

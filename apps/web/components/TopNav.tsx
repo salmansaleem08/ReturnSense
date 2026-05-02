@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
+import { LogoMark, LogoWordmark } from "@/components/brand/logo-mark";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -24,11 +25,11 @@ export function TopNav() {
   }
 
   return (
-    <nav className="rs-z-nav-main sticky top-0 z-50 h-[54px] border-b border-border/80 bg-card/75 backdrop-blur-xl">
+    <nav className="sticky top-0 z-50 h-[54px] border-b border-border bg-card/90 backdrop-blur-md">
       <div className="mx-auto flex h-full max-w-ig items-center justify-between px-4 sm:px-5">
         <Link href="/dashboard" className="flex items-center gap-2.5">
-          <span className="rs-logo-mark text-[13px]">R</span>
-          <span className="rs-text-gradient text-base font-semibold tracking-tight">ReturnSense</span>
+          <LogoMark size={28} />
+          <LogoWordmark className="text-base" />
         </Link>
 
         <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-0">
@@ -38,10 +39,10 @@ export function TopNav() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
                   active
-                    ? "rs-nav-active font-semibold text-foreground"
-                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                    ? "bg-muted font-medium text-foreground"
+                    : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                 }`}
               >
                 {item.label}

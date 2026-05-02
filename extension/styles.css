@@ -7,8 +7,9 @@
   top: 0;
   height: 100vh;
   width: 400px;
-  background: #FAFAFA;
-  border-left: 1px solid #DBDBDB;
+  min-height: 0;
+  background: #fafafa;
+  border-left: 1px solid #e5e5e5;
   z-index: 2147483647;
   display: flex;
   flex-direction: column;
@@ -18,8 +19,8 @@
 }
 
 #rs-panel-header {
-  background: #FFFFFF;
-  border-bottom: 1px solid #DBDBDB;
+  background: #ffffff;
+  border-bottom: 1px solid #e5e5e5;
   padding: 0 16px;
   height: 54px;
   display: flex;
@@ -34,18 +35,11 @@
   gap: 8px;
 }
 
-.rs-logo-mark {
+.rs-logo-img {
   width: 28px;
   height: 28px;
-  background: #262626;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: 700;
-  font-size: 16px;
-  font-family: Georgia, serif;
+  border-radius: 8px;
+  display: block;
   flex-shrink: 0;
 }
 
@@ -56,28 +50,33 @@
   letter-spacing: -0.2px;
 }
 
+/* Single scroll area: all analysis cards stack here (no nested scroll regions). */
 #rs-panel-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
   padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .rs-card {
-  background: #FFFFFF;
-  border: 1px solid #DBDBDB;
+  background: #ffffff;
+  border: 1px solid #e5e5e5;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
+  flex-shrink: 0;
 }
 
 .rs-card-header {
   padding: 10px 14px;
   font-weight: 600;
   font-size: 12px;
-  border-bottom: 1px solid #EFEFEF;
-  background: #FFFFFF;
+  border-bottom: 1px solid #efefef;
+  background: #fafafa;
   color: #262626;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -269,11 +268,11 @@
 .rs-action-btn:hover { opacity: 0.88; }
 
 .rs-btn-primary {
-  background: #0095F6;
+  background: #00b67b;
   color: white;
 }
 
-.rs-btn-primary:hover { background: #1877F2; opacity: 1; }
+.rs-btn-primary:hover { background: #009e6a; opacity: 1; }
 
 .rs-btn-secondary {
   background: transparent;
@@ -336,7 +335,7 @@
 
 /* Inject button on Instagram */
 .rs-analyze-btn {
-  background: #0095F6;
+  background: #00b67b;
   color: white;
   border: none;
   border-radius: 20px;
@@ -352,7 +351,7 @@
   transition: background 0.15s;
 }
 
-.rs-analyze-btn:hover { background: #1877F2; }
+.rs-analyze-btn:hover { background: #009e6a; }
 
 .rs-fab {
   position: fixed;

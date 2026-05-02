@@ -60,7 +60,7 @@ export function OutcomeMarker({
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+    <div className="rounded-2xl border border-border bg-card p-4">
       <h3 className="mb-2 text-sm font-semibold text-slate-500">Outcome Marking</h3>
       <p className="text-sm">
         Current: <span className="font-semibold capitalize">{currentOutcome}</span>

@@ -51,14 +51,12 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 motion-safe:animate-[rs-fade-in_0.4s_ease-out]">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
-          <span className="rs-text-gradient">Settings</span>
-        </h1>
-        <p className="text-sm text-muted-foreground">Account details, analysis quota, and the Chrome extension</p>
-      </header>
+      <div className="rounded-xl border border-border bg-card px-5 py-6 md:px-8 md:py-7">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">Settings</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Account, monthly quota, and the Chrome extension</p>
+      </div>
 
-      <Card className="rs-card-elevated rounded-[var(--radius-md)] border-border shadow-none">
+      <Card className="rounded-[var(--radius-md)] border-border bg-card shadow-none">
         <CardHeader>
           <CardTitle className="text-base">Account</CardTitle>
           <CardDescription>Profile and plan for this seller account.</CardDescription>
@@ -81,7 +79,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card className="rs-card-elevated rounded-[var(--radius-md)] border-border shadow-none">
+      <Card className="rounded-[var(--radius-md)] border-border bg-card shadow-none">
         <CardHeader>
           <CardTitle className="text-base">Monthly usage</CardTitle>
           <CardDescription>AI analyses count toward your monthly quota.</CardDescription>
@@ -97,11 +95,8 @@ export default function SettingsPage() {
               </div>
               <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
                 <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: `${usagePercent}%`,
-                    background: "linear-gradient(90deg, hsl(var(--rs-g1)), hsl(var(--rs-g2)), hsl(var(--rs-g3)))"
-                  }}
+                  className="h-full rounded-full bg-primary transition-all duration-500"
+                  style={{ width: `${usagePercent}%` }}
                 />
               </div>
             </div>
@@ -112,7 +107,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card className="rs-card-elevated rounded-[var(--radius-md)] border-border shadow-none">
+      <Card className="rounded-[var(--radius-md)] border-border bg-card shadow-none">
         <CardHeader>
           <CardTitle className="text-base">Chrome extension</CardTitle>
           <CardDescription>

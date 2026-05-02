@@ -5,7 +5,7 @@ export function TrustScoreGauge({ score }: { score: number }) {
   const progress = circumference * (safeScore / 100);
 
   return (
-    <div className="rs-card-elevated rounded-2xl border border-border bg-card p-5">
+    <div className="rounded-2xl border border-border bg-card p-5">
       <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Trust score</h3>
       <div className="relative mx-auto h-44 w-44">
         <svg viewBox="0 0 160 160" className="h-full w-full -rotate-90">

@@ -119,7 +119,7 @@ export default function HomePage() {
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
                 href="/signup"
-                className="inline-flex h-11 items-center justify-center rounded-xl bg-primary px-6 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition hover:opacity-90"
+                className="inline-flex h-11 items-center justify-center rounded-xl bg-primary px-6 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
               >
                 Start free
               </Link>
@@ -142,18 +142,18 @@ export default function HomePage() {
             </ul>
           </div>
 
-          <div className="relative rounded-2xl border border-border bg-card/80 p-4 shadow-xl shadow-black/5 backdrop-blur dark:shadow-black/20">
+          <div className="relative rounded-2xl border border-border bg-card p-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-xl border border-border/80 bg-gradient-to-b from-card to-muted/30 p-3">
+              <div className="rounded-xl border border-border bg-muted/30 p-3 dark:bg-muted/20">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Illustrative trend</p>
                 <MarketingTrendChart />
               </div>
-              <div className="flex flex-col items-center justify-center rounded-xl border border-border/80 bg-gradient-to-b from-card to-muted/30 p-3">
+              <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-muted/30 p-3 dark:bg-muted/20">
                 <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Risk mix</p>
                 <MarketingRiskDonut />
               </div>
             </div>
-            <div className="mt-4 rounded-xl border border-border/80 bg-gradient-to-r from-slate-50/80 to-cyan-50/30 p-3 dark:from-slate-900/50 dark:to-cyan-950/20">
+            <div className="mt-4 rounded-xl border border-border bg-muted/20 p-3">
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Activity (sample)</p>
               <MarketingBarSpark />
             </div>
@@ -174,7 +174,7 @@ export default function HomePage() {
             {features.map((f) => (
               <div
                 key={f.title}
-                className="group rounded-2xl border border-border bg-card p-6 transition hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5"
+                className="group rounded-2xl border border-border bg-card p-6 transition hover:border-border"
               >
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/15 to-cyan-500/10 text-emerald-700 dark:text-emerald-400">
                   <f.icon className="h-5 w-5" />
@@ -222,7 +222,7 @@ export default function HomePage() {
                 key={p.name}
                 className={`rounded-2xl border p-8 ${
                   p.highlight
-                    ? "border-primary/50 bg-gradient-to-b from-primary/10 to-card shadow-lg shadow-primary/10"
+                    ? "border-primary/40 bg-primary/5"
                     : "border-border bg-card"
                 }`}
               >

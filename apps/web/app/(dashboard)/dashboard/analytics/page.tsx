@@ -139,9 +139,7 @@ export default function AnalyticsPage() {
   return (
     <div className="grid w-full gap-6 motion-safe:animate-[rs-fade-in_0.45s_ease-out]">
       <header className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
-          <span className="rs-text-gradient">Analytics</span>
-        </h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">Analytics</h1>
         <p className="text-sm text-muted-foreground">Trust, risk, and outcome patterns across your buyers</p>
       </header>
 
@@ -259,18 +257,17 @@ export default function AnalyticsPage() {
 
 function Kpi({ title, value }: { title: string; value: number }) {
   return (
-    <div className="relative overflow-hidden rounded-[var(--radius-md)] border border-border bg-card p-4 pt-3 shadow-none transition-shadow hover:shadow-md">
-      <div className="rs-top-accent absolute left-3 right-3 top-0" />
+    <div className="rounded-[var(--radius-md)] border border-border bg-card p-4">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
-      <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">{value}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{value}</p>
     </div>
   );
 }
 
 function ChartCard({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="rs-card-elevated rounded-[var(--radius-md)] p-4">
-      <h3 className="mb-3 text-base font-bold tracking-tight rs-text-gradient">{title}</h3>
+    <div className="rounded-[var(--radius-md)] border border-border bg-card p-4">
+      <h3 className="mb-3 text-sm font-semibold text-foreground">{title}</h3>
       {children}
     </div>
   );

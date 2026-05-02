@@ -5,22 +5,10 @@ import { MarketingBarSpark, MarketingRiskDonut, MarketingTrendChart } from "@/co
 /** Illustrative charts + product copy for auth pages (not live account data). */
 export function AuthMarketingPanel() {
   return (
-    <div
-      className="relative flex min-h-[320px] flex-col justify-between overflow-hidden rounded-2xl border border-border/60 p-6 lg:min-h-full"
-      style={{
-        background:
-          "linear-gradient(135deg, hsl(var(--rs-g1) / 0.1) 0%, hsl(var(--rs-g3) / 0.08) 50%, hsl(var(--rs-accent-v) / 0.1) 100%)"
-      }}
-    >
-      <div
-        className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full blur-2xl"
-        style={{ background: "linear-gradient(135deg, hsl(var(--rs-g3) / 0.35), hsl(var(--rs-g1) / 0.2))" }}
-      />
+    <div className="relative flex min-h-[320px] flex-col justify-between rounded-2xl border border-border bg-muted/40 p-6 lg:min-h-full dark:bg-muted/25">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-400">ReturnSense</p>
-        <h2 className="mt-2 text-2xl font-bold leading-tight">
-          <span className="rs-text-gradient">See risk before you ship COD</span>
-        </h2>
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">ReturnSense</p>
+        <h2 className="mt-2 text-2xl font-semibold leading-tight text-foreground">See risk before you ship COD</h2>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
           Trust scores, phone and address context, and your own order history — so you waste less time on no-shows and
           chargebacks.

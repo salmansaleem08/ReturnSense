@@ -54,8 +54,8 @@ export default async function BuyerDetailPage({ params }: { params: { id: string
   return (
     <div className="w-full max-w-[min(1600px,100%)] space-y-6 motion-safe:animate-[rs-fade-in_0.4s_ease-out]">
       <header className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
-          <span className="rs-text-gradient">@{buyer.instagram_username}</span>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
+          @{buyer.instagram_username}
         </h1>
         <p className="text-sm text-muted-foreground">Analysis detail and delivery context</p>
       </header>

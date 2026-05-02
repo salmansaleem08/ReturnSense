@@ -116,8 +116,8 @@ export default function DashboardPage() {
         )}
       </section>
 
-      <section className="motion-safe:animate-[rs-fade-in_0.5s_ease-out] rs-card-elevated rounded-xl p-4">
-        <h2 className="mb-1 text-base font-bold tracking-tight rs-text-gradient">Analysis activity</h2>
+      <section className="motion-safe:animate-[rs-fade-in_0.5s_ease-out] rounded-xl border border-border bg-card p-4">
+        <h2 className="mb-1 text-sm font-semibold text-foreground">Analysis activity</h2>
         <p className="mb-3 text-xs text-muted-foreground">New buyer analyses per day (last 14 days)</p>
         {loading ? (
           <Skeleton className="h-[200px] w-full rounded-[var(--radius-md)]" />
@@ -164,9 +164,9 @@ export default function DashboardPage() {
         )}
       </section>
 
-      <section className="motion-safe:animate-[rs-fade-in_0.55s_ease-out] rs-card-elevated rounded-xl p-4">
+      <section className="motion-safe:animate-[rs-fade-in_0.55s_ease-out] rounded-xl border border-border bg-card p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-bold tracking-tight rs-text-gradient">Recent buyer analyses</h2>
+          <h2 className="text-sm font-semibold text-foreground">Recent buyer analyses</h2>
           <Link href="/dashboard/buyers" className="text-xs font-semibold text-primary">
             View all
           </Link>
@@ -211,15 +211,13 @@ export default function DashboardPage() {
         </Table>
       </section>
 
-      <section className="motion-safe:animate-[rs-fade-in_0.6s_ease-out] rs-gradient-border rounded-2xl">
-        <div className="rs-gradient-inner rounded-2xl p-5">
-        <h2 className="mb-3 text-base font-bold tracking-tight rs-text-gradient">Extension workflow</h2>
+      <section className="motion-safe:animate-[rs-fade-in_0.6s_ease-out] rounded-xl border border-border bg-card p-5">
+        <h2 className="mb-3 text-sm font-semibold text-foreground">Extension workflow</h2>
         <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
           <li>Log in once in the ReturnSense extension popup (same account as this dashboard).</li>
           <li>Open an Instagram DM and use <strong>Analyze Buyer</strong> to capture the thread.</li>
           <li>Confirm phone and address, then run analysis before shipping COD.</li>
         </ol>
-        </div>
       </section>
     </div>
   );

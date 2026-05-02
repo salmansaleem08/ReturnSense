@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { LogoMark } from "@/components/brand/logo-mark";
 import { AuthMarketingPanel } from "@/components/auth/auth-marketing-panel";
 import { PageAmbientBg } from "@/components/layout/page-ambient";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -76,12 +77,10 @@ export default function SignupPage() {
 
       <div className="mx-auto grid min-h-screen max-w-6xl grid-cols-1 gap-8 px-4 py-16 lg:grid-cols-2 lg:items-center lg:gap-12 lg:px-8 lg:py-12">
         <div className="order-2 lg:order-1">
-          <div className="rs-card-elevated mx-auto w-full max-w-md rounded-2xl border border-border p-8">
-            <div className="mb-8 text-center">
-              <div className="rs-logo-mark rs-logo-mark--lg mx-auto mb-4">R</div>
-              <h1 className="text-2xl font-bold">
-                <span className="rs-text-gradient">Create your account</span>
-              </h1>
+          <div className="mx-auto w-full max-w-md rounded-2xl border border-border bg-card p-8">
+            <div className="mb-8 flex flex-col items-center text-center">
+              <LogoMark size={40} className="mb-4" />
+              <h1 className="text-2xl font-semibold text-foreground">Create your account</h1>
               <p className="mt-2 text-sm text-muted-foreground">
                 Join sellers who use ReturnSense to stress-test COD decisions before every shipment.
               </p>
@@ -139,7 +138,7 @@ export default function SignupPage() {
               <button
                 type="submit"
                 disabled={pending || !formValid}
-                className="w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 transition hover:opacity-90 disabled:opacity-45"
+                className="w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-45"
               >
                 {pending ? "Signing up…" : "Sign up"}
               </button>

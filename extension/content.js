@@ -1,5 +1,10 @@
 const API_BASE = "https://return-sense-web.vercel.app";
 
+const RS_BRAND_LOGO =
+  typeof chrome !== "undefined" && chrome.runtime?.getURL
+    ? chrome.runtime.getURL("icons/brand-mark.svg")
+    : "";
+
 function isInstagramHost() {
   const host = window.location.hostname.replace(/^www\./, "");
   return host === "instagram.com" || host === "m.instagram.com";
@@ -732,7 +737,7 @@ function showExtractionLoadingPanel() {
   panel.innerHTML = `
     <div id="rs-panel-header">
       <div class="rs-header-logo">
-        <div class="rs-logo-mark">R</div>
+        <img src="${RS_BRAND_LOGO}" width="28" height="28" alt="" class="rs-logo-img" />
         <span class="rs-header-title">ReturnSense</span>
       </div>
       <button type="button" class="rs-close-btn" id="rs-close-extract" aria-label="Close">&#x2715;</button>
@@ -784,7 +789,7 @@ function openAnalysisPanel(username, messages, detectedPhone, detectedAddress) {
   panel.innerHTML = `
     <div id="rs-panel-header">
       <div class="rs-header-logo">
-        <div class="rs-logo-mark">R</div>
+        <img src="${RS_BRAND_LOGO}" width="28" height="28" alt="" class="rs-logo-img" />
         <span class="rs-header-title">ReturnSense</span>
       </div>
       <button type="button" class="rs-close-btn" id="rs-close-panel" aria-label="Close">&#x2715;</button>
