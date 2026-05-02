@@ -18,13 +18,13 @@ OVERVIEW
 
 EXTENSION ATTRIBUTION (extension/content.js — harvestVisibleMessages)
 -----------------------------------------------------------------------
-• Order: (1) Avatar / square slot left of bubble → buyer. (2) Structural presentation: substantive span-wrapped
-  copy → seller lean; div-heavy body without span → buyer lean (`ig-struct-*`). (3) `--x-width` spacers.
-  (4) Optional IG_CLASS_* fingerprints + `span.x1gslohp`. (5) Large `role="button"` → buyer.
-• Geometry: bubble center vs **scrollable chat column** (`rsResolveChatColumnRect`), not full `[role=main]` —
-  mitigates extension panel narrowing the thread. Left 40% → buyer, right 40% → seller (RTL mirrored); middle
-  20% stays unresolved for geometry.
-• Flex justify-content, then viewport midline last resort. `rsPickMessageBubbleRect` = widest `div[dir=auto]`.
+• Order: (1) Avatar / leading portion of row → buyer (`ig-avatar-*`; skips imgs inside bubble text).
+  (2) **`role="button"` on bubble → buyer** — before structural heuristics (Instagram uses span-heavy DOM on both sides).
+  (3) `--x-width` spacers. (4) IG_CLASS_* fingerprints + `span.x1gslohp`. (5) Structural span-vs-div (`ig-struct-*`;
+  skipped when incoming role=button matches).
+• Geometry: bubble vs scrollable chat column (`rsResolveChatColumnRect`). Outer ~38%/62% zones; **middle band uses
+  column midline split** (not left unknown). **Flex-end-only** compares bubble X to column mid (not “always seller”).
+• Viewport last resort. `rsPickMessageBubbleRect` = widest `div[dir=auto]`.
 • Diagnostics: `localStorage RS_ATTRIB_VERBOSE=1` logs each message’s winning layer + confidence. If ≥8
   high-confidence lines skew >80% one side after harvest, console warns + dumps sample row class tokens.
 
