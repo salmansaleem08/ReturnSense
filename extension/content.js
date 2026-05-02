@@ -303,36 +303,175 @@ function findChatHeaderToolbar() {
   ]);
 }
 
+/** Reserved title segments that are not Instagram usernames. */
+const TITLE_SKIP = new Set(
+  ["instagram", "direct", "chats", "inbox", ""].map((s) => s.toLowerCase())
+);
+
+/** Strategy 2: username-like token (word chars, underscores, dots). */
+function looksLikeUsernameToken(text) {
+  if (!text || typeof text !== "string") return false;
+  const t = text.trim();
+  if (!t.length || t.includes(" ") || t.length > 30 || t.length < 1) return false;
+  return /^[\w.]+$/.test(t);
+}
+
 function extractBuyerUsername() {
-  const fromPage = extractUsernameFromPageLinks();
-  if (fromPage) return fromPage;
+  /** @param {number} n @param {string|null|undefined} found */
+  const logStrategy = (n, found) => {
+    console.log(`[RS] Username strategy ${n}: "${found ?? null}"`);
+  };
 
-  const header = findChatHeaderToolbar();
-  if (!header) return extractUsernameFromPageLinks();
-
-  const anchors = header.querySelectorAll("a[href*='instagram.com']");
-  for (const link of anchors) {
-    const match = link.href.match(/instagram\.com\/([A-Za-z0-9._]+)/);
-    if (match && !IG_USERNAME_RESERVED.has(match[1].toLowerCase())) return match[1];
+  // Strategy 1 — Page title
+  try {
+    const title = typeof document.title === "string" ? document.title : "";
+    const parts = title.split(" • ");
+    const first = (parts[0] || "").trim();
+    if (first && !TITLE_SKIP.has(first.toLowerCase()) && first.length < 50) {
+      logStrategy(1, first);
+      return first.replace(/^@/, "");
+    }
+    logStrategy(1, null);
+  } catch (_e) {
+    logStrategy(1, null);
   }
 
-  const ariaEls = header.querySelectorAll("[aria-label]");
-  for (const ariaTarget of ariaEls) {
-    const label = ariaTarget.getAttribute("aria-label") || "";
-    const fromAt = label.match(/@([A-Za-z0-9._]+)/);
-    if (fromAt) return fromAt[1];
-    const plain = label.trim();
-    if (/^[A-Za-z0-9._]+$/.test(plain) && plain.length >= 2 && plain.length <= 33) return plain;
+  // Strategy 2 — Active sidebar item in Chats nav
+  try {
+    let chatNav = null;
+    const all = document.querySelectorAll("[aria-label]");
+    for (let i = 0; i < all.length; i++) {
+      const el = all[i];
+      const label = el?.getAttribute?.("aria-label") || "";
+      if (/chats/i.test(label)) {
+        chatNav = el;
+        break;
+      }
+    }
+    const searchRoots = [];
+    if (chatNav) searchRoots.push(chatNav);
+    searchRoots.push(document.body);
+
+    for (let r = 0; r < searchRoots.length; r++) {
+      const root = searchRoots[r];
+      if (!root?.querySelectorAll) continue;
+      const items = root.querySelectorAll('[role="listitem"]');
+      for (let j = 0; j < items.length; j++) {
+        const item = items[j];
+        if (!item) continue;
+        const selected =
+          item.getAttribute?.("aria-selected") === "true" ||
+          item.getAttribute?.("aria-current") === "true";
+        if (!selected) continue;
+        const walker = document.createTreeWalker(item, NodeFilter.SHOW_TEXT, null);
+        let node = walker.nextNode();
+        while (node) {
+          const raw = node.textContent != null ? String(node.textContent) : "";
+          const chunk = raw.trim();
+          if (looksLikeUsernameToken(chunk)) {
+            logStrategy(2, chunk);
+            return chunk.replace(/^@/, "");
+          }
+          node = walker.nextNode();
+        }
+      }
+    }
+    logStrategy(2, null);
+  } catch (_e) {
+    logStrategy(2, null);
   }
 
-  const spans = header.querySelectorAll("span[dir], h1, h2, div[dir='auto']");
-  for (const span of spans) {
-    const raw = span.innerText?.trim() || "";
-    const oneLine = raw.split("\n")[0].replace("@", "").trim();
-    if (/^[A-Za-z0-9._]+$/.test(oneLine) && oneLine.length >= 2 && oneLine.length <= 33) return oneLine;
+  // Strategy 3 — Header anchor tags in main
+  try {
+    const main = document.querySelector('[role="main"]');
+    if (main?.querySelectorAll) {
+      const anchors = main.querySelectorAll("a[href]");
+      const rejectSeg = new Set(["direct", "inbox", "p", "reel", "explore", "accounts", "stories", "tv", "audio"]);
+      for (let i = 0; i < anchors.length; i++) {
+        const a = anchors[i];
+        const href = a?.getAttribute?.("href") || "";
+        if (!href) continue;
+        let path = "";
+        try {
+          path = new URL(href, window.location.origin).pathname || "";
+        } catch (_e2) {
+          continue;
+        }
+        const segments = path.split("/").filter(Boolean);
+        for (let s = 0; s < segments.length; s++) {
+          const seg = segments[s];
+          if (!seg || rejectSeg.has(seg.toLowerCase())) continue;
+          if (seg.length > 30) continue;
+          if (/\.(jpe?g|png|gif|webp|mp4|mov)$/i.test(seg)) continue;
+          logStrategy(3, seg);
+          return seg;
+        }
+      }
+    }
+    logStrategy(3, null);
+  } catch (_e) {
+    logStrategy(3, null);
   }
 
-  return extractUsernameFromPageLinks();
+  // Strategy 4 — Heading element in main
+  try {
+    const heading = document.querySelector('[role="main"] h1, [role="main"] [role="heading"]');
+    if (heading) {
+      const inner = typeof heading.innerText === "string" ? heading.innerText.trim() : "";
+      if (inner && inner.length > 0 && inner.length < 50 && !/\n/.test(inner)) {
+        logStrategy(4, inner);
+        return inner.replace(/^@/, "");
+      }
+    }
+    logStrategy(4, null);
+  } catch (_e) {
+    logStrategy(4, null);
+  }
+
+  // Strategy 5 — Aria-label in main
+  try {
+    const main = document.querySelector('[role="main"]');
+    if (main?.querySelectorAll) {
+      const labeled = main.querySelectorAll("[aria-label]");
+      const re = /(?:conversation with|chat with|messaging with)\s+(.+)/i;
+      for (let i = 0; i < labeled.length; i++) {
+        const el = labeled[i];
+        const label = el?.getAttribute?.("aria-label") || "";
+        const m = label.match(re);
+        if (m && m[1]) {
+          const name = m[1].trim();
+          if (name && name.length < 50) {
+            logStrategy(5, name);
+            return name.replace(/^@/, "");
+          }
+        }
+      }
+    }
+    logStrategy(5, null);
+  } catch (_e) {
+    logStrategy(5, null);
+  }
+
+  // Strategy 6 — URL path parsing
+  try {
+    const path = window.location?.pathname || "";
+    const segments = path.split("/").filter(Boolean);
+    const reject = new Set(["direct", "inbox", "t", "p", "reel", "explore", "stories"]);
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      if (!seg || reject.has(seg.toLowerCase())) continue;
+      if (/^\d{7,}$/.test(seg)) continue;
+      if (seg.length >= 1 && seg.length <= 30) {
+        logStrategy(6, seg);
+        return seg;
+      }
+    }
+    logStrategy(6, null);
+  } catch (_e) {
+    logStrategy(6, null);
+  }
+
+  return "unknown_buyer";
 }
 
 function closePanel() {
