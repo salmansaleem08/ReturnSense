@@ -343,62 +343,74 @@ async function extractChatMessages() {
   return best.length ? best : [];
 }
 
-const PHONE_BOOST_RE =
-  /number|no\.|no\s|contact|call|whatsapp|wp|watsapp|mere number|my number|mera number|apna number/i;
-
-const PHONE_SCAN_RE =
-  /((\+92|0092|92|0)[.\- ]?(3\d{2})[.\- ]?\d{7})|(\+[1-9]\d{1,3}[.\- ]?\d{6,14})|(0[2-9]\d[.\- ]?\d{7,8})/g;
-
-function cleanPhoneMatch(raw) {
-  if (!raw || typeof raw !== "string") return null;
-  const s = raw.replace(/[\s.\-]+/g, "");
-  return s.length ? s : null;
-}
-
-/**
- * Scans buyer-facing messages for Pakistan/international phone patterns.
- * @param {Array<{ role: string; text: string }>} messages
- * @returns {string|null}
- */
 function autoDetectPhone(messages) {
-  if (!Array.isArray(messages) || messages.length === 0) return null;
+  if (!messages || messages.length === 0) return null;
+
+  const confidenceKeywords = [
+    "number",
+    "no.",
+    "no ",
+    "contact",
+    "call",
+    "whatsapp",
+    "wp",
+    "watsapp",
+    "mere number",
+    "my number",
+    "mera number",
+    "apna number",
+    "phone",
+    "mob",
+    "mobile",
+    "cell",
+    "nmbr",
+    "nmber",
+    "contct",
+    "whats app",
+    "whtsp"
+  ];
 
   const prioritized = [
     ...messages.filter((m) => m && (m.role === "buyer" || m.role === "unknown")),
     ...messages.filter((m) => m && m.role === "seller")
   ];
 
-  /** @type {Array<{ cleaned: string; boosted: boolean; order: number }>} */
-  const candidates = [];
-  let order = 0;
+  const phoneRegex =
+    /(\+92|0092|92)?[\s.\-]?(0?3\d{2})[\s.\-]?\d{3}[\s.\-]?\d{4}|(\+[1-9]\d{1,3}[\s.\-]?\d{6,14})|(0[2-9]\d[\s.\-]?\d{7,8})/g;
 
-  for (let i = 0; i < prioritized.length; i++) {
-    const msg = prioritized[i];
-    const text = typeof msg?.text === "string" ? msg.text : "";
-    if (!text) continue;
-    const boosted = PHONE_BOOST_RE.test(text);
-    PHONE_SCAN_RE.lastIndex = 0;
-    let match;
-    while ((match = PHONE_SCAN_RE.exec(text)) !== null) {
-      const cleaned = cleanPhoneMatch(match[0]);
-      if (cleaned) {
-        candidates.push({ cleaned, boosted, order });
-        order += 1;
-      }
+  const results = [];
+
+  for (let mi = 0; mi < prioritized.length; mi++) {
+    const msg = prioritized[mi];
+    const text = (msg && msg.text) || "";
+
+    const rawMatches = text.match(phoneRegex);
+    if (!rawMatches) continue;
+
+    const lower = text.toLowerCase();
+    const hasConfidence = confidenceKeywords.some((kw) => lower.includes(kw.toLowerCase()));
+
+    for (let ri = 0; ri < rawMatches.length; ri++) {
+      const raw = rawMatches[ri];
+      let cleaned = raw.replace(/[\s.\-]/g, "").replace(/^00/, "+");
+      if (/^92\d/.test(cleaned) && !cleaned.startsWith("+")) cleaned = `+${cleaned}`;
+      results.push({ number: cleaned, confidence: hasConfidence ? 2 : 1 });
     }
   }
 
-  candidates.sort((a, b) => {
-    if (a.boosted !== b.boosted) return a.boosted ? -1 : 1;
-    return a.order - b.order;
-  });
+  if (results.length === 0) return null;
+
+  results.sort((a, b) => b.confidence - a.confidence);
 
   const seen = new Set();
-  for (let j = 0; j < candidates.length; j++) {
-    const c = candidates[j].cleaned;
-    if (seen.has(c)) continue;
-    seen.add(c);
-    return c;
+  for (let j = 0; j < results.length; j++) {
+    const r = results[j];
+    const normalized = r.number.replace(/\D/g, "");
+    if (!seen.has(normalized)) {
+      seen.add(normalized);
+      console.log("[RS] autoDetectPhone found:", r.number, "confidence:", r.confidence);
+      return r.number;
+    }
   }
 
   return null;
