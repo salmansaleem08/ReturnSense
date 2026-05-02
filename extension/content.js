@@ -17,6 +17,17 @@ let observerActive = false;
 let pendingDebounce = null;
 let lastSyncedPath = "";
 
+/** Scroll-capture mode: accumulates messages while user scrolls the thread. */
+let capturedMessages = [];
+let isCapturing = false;
+let captureObserver = null;
+let captureIdleTimer = null;
+let captureUsernameForIdle = null;
+
+let lastUsername = "unknown_buyer";
+/** @type {Array<{ role: string; text: string }>} */
+let lastMessages = [];
+
 function queryWithFallbacks(selectors, root = document) {
   const base = root?.querySelector ? root : document;
   for (const selector of selectors) {
@@ -30,317 +41,218 @@ function queryWithFallbacks(selectors, root = document) {
   return null;
 }
 
-/** Prefer scrollable column inside the open DM (not the inbox list). */
-function findMessageScrollContainer(within) {
-  const root = within?.querySelector ? within : document.querySelector("[role='main']");
-  if (!root?.querySelectorAll) return null;
-  let best = null;
-  let bestH = 0;
-  root.querySelectorAll("div").forEach((el) => {
-    const st = window.getComputedStyle(el);
-    const oy = st.overflowY;
-    if (oy !== "auto" && oy !== "scroll" && oy !== "overlay") return;
-    const h = el.scrollHeight - el.clientHeight;
-    if (h > 40 && el.scrollHeight > bestH) {
-      bestH = el.scrollHeight;
-      best = el;
-    }
-  });
-  return best;
-}
-
-/** Desktop DM: inbox left, thread right — prefer last main column. */
-function findRightThreadColumn() {
-  const main = document.querySelector("[role='main']");
-  if (!main?.children?.length) return null;
-  const kids = main.children;
-  if (kids.length >= 2) return kids[kids.length - 1];
-  return main;
-}
-
-function findActiveThreadPanel() {
-  const main = document.querySelector("[role='main']");
-  const rightCol = findRightThreadColumn();
-  const searchRoots = [rightCol, main].filter(Boolean);
-  const header = findChatHeaderToolbar();
-
-  if (header) {
-    let node = header.parentElement;
-    for (let i = 0; i < 24 && node; i++) {
-      const rows = node.querySelectorAll("[role='row'], [role='listitem'], div[role='presentation']");
-      if (rows.length >= 2) return node;
-      node = node.parentElement;
-    }
+function resetCaptureIdleTimer() {
+  if (captureIdleTimer) {
+    clearTimeout(captureIdleTimer);
+    captureIdleTimer = null;
   }
-
-  for (const r of searchRoots) {
-    const scrollHost = findMessageScrollContainer(r);
-    if (scrollHost) return scrollHost;
-  }
-  return rightCol || main || document.body;
+  captureIdleTimer = setTimeout(() => {
+    console.log("[RS] Idle timeout (60s without new messages); finalizing capture");
+    if (isCapturing && captureUsernameForIdle != null) {
+      finalizeCaptureAndAnalyze(captureUsernameForIdle);
+    }
+  }, 60000);
 }
 
 /**
- * Instagram lazy-loads older DM bubbles while scrolling up.
- * Scroll to top repeatedly until height stabilizes so extract sees full thread.
+ * Merges visible DOM messages into `capturedMessages` while user scrolls.
  */
-async function ensureChatHistoryLoaded() {
-  const panel = findActiveThreadPanel();
-  const scrollEl = findMessageScrollContainer(panel) || findMessageScrollContainer(document.querySelector("[role='main']"));
-  if (!scrollEl) return;
-
-  let stable = 0;
-  let lastH = -1;
-  for (let pass = 0; pass < 48; pass++) {
-    scrollEl.scrollTop = 0;
-    await new Promise((r) => setTimeout(r, 420));
-    const h = scrollEl.scrollHeight;
-    if (h <= lastH + 8) {
-      stable++;
-      if (stable >= 4) break;
-    } else {
-      stable = 0;
-      lastH = h;
-    }
-  }
-}
-
-function dedupeConsecutiveByText(messages) {
-  const out = [];
-  let prevText = null;
-  for (let i = 0; i < messages.length; i++) {
-    const m = messages[i];
-    const t = (m?.text || "").trim();
-    if (t === prevText) continue;
-    out.push({ role: m.role, text: t });
-    prevText = t;
-  }
-  return out;
-}
-
-const TIMESTAMP_LINE_RE = /^\d{1,2}:\d{2}(\s?(AM|PM))?$/i;
-const DATE_SEPARATOR_RE = /^(Today|Yesterday|\w+ \d{1,2},?\s*\d{0,4})$/i;
-
-const ROW_SKIP_EXACT = new Set([
-  "seen",
-  "delivered",
-  "read",
-  "active now",
-  "send message",
-  "voice clip",
-  "photo",
-  "video",
-  "like",
-  "unsend"
-]);
-
-const INBOX_CATEGORY_RE = /^(Primary|General|Requests|Unread)$/i;
-const SIDEBAR_PREVIEW_RE = /^[\w\s]+ sent (an attachment|a photo|a video|a reel|a voice clip)\.?$/i;
-
-function findMessageContainer() {
-  const main = document.querySelector('[role="main"]');
-  if (!main) return null;
-
-  const rowEl = main.querySelector('[role="row"]');
-  const rowParent = rowEl?.closest?.('div[style*="overflow"]') ?? rowEl?.parentElement ?? null;
-  if (rowParent) return rowParent;
-
-  const allScrollable = Array.from(main.querySelectorAll("*")).filter((el) => {
-    if (!el?.children?.length) return false;
-    const s = window.getComputedStyle(el);
-    return (s.overflowY === "auto" || s.overflowY === "scroll") && el.children.length > 3;
-  });
-  if (allScrollable.length > 0) {
-    return allScrollable.reduce((a, b) => (a.children.length >= b.children.length ? a : b));
-  }
-  return null;
-}
-
-function hasChatsOrInboxAncestor(el) {
-  let n = el;
-  for (let i = 0; i < 24 && n; i++) {
-    const al = n.getAttribute?.("aria-label") || "";
-    if (/chats/i.test(al) || /inbox/i.test(al)) return true;
-    n = n.parentElement;
-  }
-  return false;
-}
-
-function detectRowMessageRole(rowEl) {
-  if (!rowEl) return "unknown";
-  let ancestor = rowEl;
-  for (let d = 0; d < 8 && ancestor; d++) {
-    const st = window.getComputedStyle(ancestor);
-    const jc = st?.justifyContent || "";
-    const als = st?.alignSelf || "";
-    if (jc.includes("flex-end") || als === "flex-end") return "seller";
-    if (jc.includes("flex-start")) return "buyer";
-    ancestor = ancestor.parentElement;
-  }
+function harvestVisibleMessages() {
   try {
-    const r = rowEl.getBoundingClientRect?.();
-    if (r && r.left > window.innerWidth * 0.5) return "seller";
-  } catch (_e) {
-    /* ignore */
-  }
-  return "unknown";
-}
-
-function extractStrategyRows(container) {
-  if (!container?.querySelectorAll) return [];
-  const rows = container.querySelectorAll('[role="row"]');
-  const out = [];
-  for (let i = 0; i < rows.length; i++) {
-    const el = rows[i];
-    if (!el) continue;
-    const inner = typeof el.innerText === "string" ? el.innerText : "";
-    const text = inner.trim();
-    if (text.length < 2) continue;
-    if (TIMESTAMP_LINE_RE.test(text)) continue;
-    if (DATE_SEPARATOR_RE.test(text)) continue;
-    const low = text.toLowerCase();
-    if (ROW_SKIP_EXACT.has(low)) continue;
-    const role = detectRowMessageRole(el);
-    out.push({ role, text });
-  }
-  return dedupeConsecutiveByText(out);
-}
-
-function extractStrategyDirAuto(main) {
-  if (!main?.querySelectorAll) return [];
-  const divs = Array.from(main.querySelectorAll('div[dir="auto"]'));
-  const out = [];
-  for (let i = 0; i < divs.length; i++) {
-    const el = divs[i];
-    if (!el) continue;
-    if (hasChatsOrInboxAncestor(el)) continue;
-    if (el.querySelector?.("button, input, textarea, select")) continue;
-    const inner = typeof el.innerText === "string" ? el.innerText.trim() : "";
-    if (inner.length < 2) continue;
-    if (TIMESTAMP_LINE_RE.test(inner)) continue;
-    if (DATE_SEPARATOR_RE.test(inner)) continue;
-    const low = inner.toLowerCase();
-    if (ROW_SKIP_EXACT.has(low)) continue;
-    let role = "unknown";
-    try {
-      const box = el.getBoundingClientRect?.();
-      if (box && box.left > window.innerWidth * 0.5) role = "seller";
-      else role = "buyer";
-    } catch (_e) {
-      role = "unknown";
-    }
-    out.push({ role, text: inner });
-  }
-  return dedupeConsecutiveByText(out);
-}
-
-function extractStrategyMainLines(main) {
-  const raw = main && typeof main.innerText === "string" ? main.innerText : "";
-  if (!raw) return [];
-  const lines = raw.split("\n");
-  const out = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = (lines[i] || "").trim();
-    if (line.length < 3) continue;
-    if (TIMESTAMP_LINE_RE.test(line)) continue;
-    if (DATE_SEPARATOR_RE.test(line)) continue;
-    const low = line.toLowerCase();
-    if (ROW_SKIP_EXACT.has(low)) continue;
-    if (INBOX_CATEGORY_RE.test(line)) continue;
-    if (SIDEBAR_PREVIEW_RE.test(line)) continue;
-    out.push({ role: "unknown", text: line });
-  }
-  return dedupeConsecutiveByText(out);
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function setRsLoadingStatus(text) {
-  const el = document.getElementById("rs-loading-status");
-  if (el) el.textContent = text;
-}
-
-/**
- * Reads DM messages from the open thread (not inbox sidebar). Always returns an array.
- */
-async function extractChatMessages() {
-  console.log("[RS] Starting message extraction on:", window.location.pathname);
-  console.log('[RS] document.querySelector("[role=\"main\"]") exists:', !!document.querySelector('[role="main"]'));
-
-  const loadingEl = document.getElementById("rs-loading-status");
-  if (loadingEl) loadingEl.textContent = "Reading chat... (attempt 1/8)";
-
-  let best = [];
-
-  for (let attempt = 1; attempt <= 8; attempt++) {
-    setRsLoadingStatus(`Reading chat... (attempt ${attempt}/8)`);
-
     const main = document.querySelector('[role="main"]');
-    const container = findMessageContainer();
+    if (!main) return;
 
-    /** Strategy 1 — role=row in thread container */
-    let batch = [];
-    let strategyUsed = 1;
-    if (container) {
-      batch = extractStrategyRows(container);
-      console.log(
-        "[RS] Strategy 1 result count:",
-        batch.length,
-        "sample:",
-        batch.slice(0, 3).map((m) => (m.text || "").substring(0, 30))
-      );
-    } else {
-      console.log("[RS] Strategy 1 result count:", 0, "sample:", []);
+    const countBefore = capturedMessages.length;
+
+    let elements = Array.from(main.querySelectorAll('[role="row"]'));
+
+    if (elements.length === 0) {
+      elements = Array.from(main.querySelectorAll('div[dir="auto"]')).filter((el) => {
+        let rect = { left: 0, width: 0, height: 0 };
+        try {
+          rect = el.getBoundingClientRect?.() || rect;
+        } catch (_e) {
+          return false;
+        }
+        return rect.left > 350 && rect.width > 0 && rect.height > 0;
+      });
     }
 
-    if (batch.length >= 3) {
-      console.log(`[RS] Extracted ${batch.length} messages via strategy 1 on attempt ${attempt}`);
-      return batch;
+    const skipPatterns = [
+      /^\d{1,2}:\d{2}(\s?(AM|PM))?$/i,
+      /^(Today|Yesterday|\w+ \d{1,2},?\s*\d{0,4})$/i,
+      /^(Seen|Delivered|Read|Active now|Send Message|Voice clip|Photo|Video|Like|Unsend|Message\.\.\.)$/i,
+      /^(Primary|General|Requests|Unread)$/i,
+      /sent (an attachment|a photo|a video|a reel|a voice clip)/i
+    ];
+
+    for (let ei = 0; ei < elements.length; ei++) {
+      const el = elements[ei];
+      if (!el) continue;
+      const text = typeof el.innerText === "string" ? el.innerText.trim() : "";
+      if (!text || text.length < 2) continue;
+      if (skipPatterns.some((p) => p.test(text))) continue;
+
+      let role = "unknown";
+      let ancestor = el;
+      for (let i = 0; i < 8; i++) {
+        ancestor = ancestor?.parentElement ?? null;
+        if (!ancestor) break;
+        let style = null;
+        try {
+          style = window.getComputedStyle(ancestor);
+        } catch (_e) {
+          style = null;
+        }
+        const jc = style?.justifyContent ?? "";
+        if (jc === "flex-end") {
+          role = "seller";
+          break;
+        }
+        if (jc === "flex-start" || jc === "normal") {
+          role = "buyer";
+          break;
+        }
+      }
+
+      if (role === "unknown") {
+        try {
+          const rect = el.getBoundingClientRect?.();
+          const viewMid = window.innerWidth / 2;
+          if (rect && rect.left + rect.width / 2 > viewMid + 60) role = "seller";
+          else if (rect && rect.left + rect.width / 2 < viewMid - 60) role = "buyer";
+        } catch (_e) {
+          /* keep unknown */
+        }
+      }
+
+      const alreadyExists = capturedMessages.some((m) => m && m.text === text);
+      if (!alreadyExists) {
+        capturedMessages.push({ role, text });
+      }
     }
 
-    /** Strategy 2 — dir=auto in main */
-    const s2 = extractStrategyDirAuto(main);
-    console.log(
-      "[RS] Strategy 2 result count:",
-      s2.length,
-      "sample:",
-      s2.slice(0, 3).map((m) => (m.text || "").substring(0, 30))
-    );
-    if (s2.length > batch.length) {
-      batch = s2;
-      strategyUsed = 2;
+    if (capturedMessages.length > countBefore) {
+      resetCaptureIdleTimer();
     }
 
-    if (batch.length >= 3) {
-      console.log(`[RS] Extracted ${batch.length} messages via strategy ${strategyUsed} on attempt ${attempt}`);
-      return batch;
+    const counter = document.getElementById("rs-capture-counter");
+    if (counter) {
+      counter.textContent = `${capturedMessages.length} messages captured`;
     }
+  } catch (_err) {
+    console.log("[RS] harvestVisibleMessages: safe exit");
+  }
+}
 
-    /** Strategy 3 — full main text lines */
-    const s3 = extractStrategyMainLines(main);
-    console.log(
-      "[RS] Strategy 3 result count:",
-      s3.length,
-      "sample:",
-      s3.slice(0, 3).map((m) => (m.text || "").substring(0, 30))
-    );
-    if (s3.length > batch.length) {
-      batch = s3;
-      strategyUsed = 3;
-    }
+function showScrollPromptBanner(username) {
+  document.getElementById("rs-scroll-banner")?.remove();
 
-    console.log(`[RS] Extracted ${batch.length} messages via strategy ${strategyUsed} on attempt ${attempt}`);
+  const banner = document.createElement("div");
+  banner.id = "rs-scroll-banner";
+  banner.style.cssText =
+    "position:fixed;top:0;left:0;right:0;z-index:2147483646;background:linear-gradient(135deg,#1E40AF,#1D4ED8);color:white;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;box-shadow:0 4px 20px rgba(0,0,0,0.3);flex-wrap:wrap;";
 
-    if (batch.length >= 3) return batch;
+  banner.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;">
+      <span style="font-size:22px;">🛡</span>
+      <div>
+        <div style="font-weight:700;font-size:14px;">ReturnSense — Capturing Chat</div>
+        <div style="font-size:12px;opacity:0.85;margin-top:2px;">
+          👆 <strong>Scroll UP through the entire chat</strong> to capture all messages, then press Done
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+      <span id="rs-capture-counter" style="font-size:12px;opacity:0.75;background:rgba(255,255,255,0.15);padding:4px 10px;border-radius:99px;">0 messages captured</span>
+      <button type="button" id="rs-capture-done" style="background:white;color:#1E40AF;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">✓ Done — Analyze</button>
+      <button type="button" id="rs-capture-cancel" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;font-family:inherit;">✕</button>
+    </div>
+  `;
 
-    if (batch.length > best.length) best = batch;
+  document.body.appendChild(banner);
+  document.body.style.paddingTop = "68px";
 
-    if (attempt < 8) await sleep(500);
+  const doneBtn = document.getElementById("rs-capture-done");
+  const cancelBtn = document.getElementById("rs-capture-cancel");
+  if (doneBtn) {
+    doneBtn.addEventListener("click", () => {
+      finalizeCaptureAndAnalyze(username);
+    });
+  }
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", () => {
+      stopCapture();
+    });
+  }
+}
+
+function stopCapture() {
+  isCapturing = false;
+  if (captureIdleTimer) {
+    clearTimeout(captureIdleTimer);
+    captureIdleTimer = null;
+  }
+  if (captureObserver) {
+    captureObserver.disconnect();
+    captureObserver = null;
+  }
+  document.getElementById("rs-scroll-banner")?.remove();
+  document.body.style.paddingTop = "";
+}
+
+function finalizeCaptureAndAnalyze(username) {
+  stopCapture();
+
+  const messages = [...capturedMessages];
+  console.log("[RS] Finalized capture:", messages.length, "messages");
+  console.log("[RS] Sample:", messages.slice(0, 5));
+
+  lastUsername = username || "unknown_buyer";
+  lastMessages = messages;
+
+  const detectedPhone = autoDetectPhone(messages);
+  const detectedAddress = autoDetectAddress(messages);
+
+  document.getElementById("rs-panel")?.remove();
+
+  openAnalysisPanel(username, messages, detectedPhone, detectedAddress);
+}
+
+function startCaptureMode(username) {
+  console.log("[RS] startCaptureMode:", username);
+  isCapturing = true;
+  capturedMessages = [];
+  captureUsernameForIdle = username;
+
+  showScrollPromptBanner(username);
+
+  const main = document.querySelector('[role="main"]');
+  if (!main) {
+    console.log("[RS] No [role=main] — cannot observe mutations");
+    return;
   }
 
-  return best.length ? best : [];
+  try {
+    harvestVisibleMessages();
+  } catch (_e) {
+    /* safe */
+  }
+  resetCaptureIdleTimer();
+
+  if (captureObserver) {
+    captureObserver.disconnect();
+    captureObserver = null;
+  }
+  captureObserver = new MutationObserver(() => {
+    if (!isCapturing) return;
+    try {
+      harvestVisibleMessages();
+    } catch (_e) {
+      /* safe */
+    }
+  });
+  captureObserver.observe(main, { childList: true, subtree: true });
 }
 
 function autoDetectPhone(messages) {
@@ -772,9 +684,6 @@ function extractBuyerUsername() {
 
 /** @type {HTMLElement | null} */
 let rsMainMarginElement = null;
-let lastUsername = "unknown_buyer";
-/** @type {Array<{ role: string; text: string }>} */
-let lastMessages = [];
 /** @type {string | null} */
 let lastSubmittedPhone = null;
 /** @type {string | null} */
@@ -828,7 +737,7 @@ function showExtractionLoadingPanel() {
  * @param {string} username
  * @param {Array<{ role: string; text: string }>} messages
  */
-function openAnalysisPanel(username, messages) {
+function openAnalysisPanel(username, messages, detectedPhone, detectedAddress) {
   let safeUsername = (username || "unknown_buyer").replace(/^\(\d+\)\s*/, "").trim();
   const forbidden = ["instagram", "direct", "inbox", "chats", "messages", "home", "explore"];
   if (!safeUsername || forbidden.includes(safeUsername.toLowerCase()) || safeUsername.length > 50) {
@@ -837,8 +746,8 @@ function openAnalysisPanel(username, messages) {
   lastUsername = safeUsername;
   lastMessages = Array.isArray(messages) ? messages.slice() : [];
 
-  const detectedPhone = autoDetectPhone(messages);
-  const detectedAddress = autoDetectAddress(messages);
+  const phoneDet = detectedPhone != null ? detectedPhone : autoDetectPhone(messages);
+  const addrDet = detectedAddress != null ? detectedAddress : autoDetectAddress(messages);
 
   const safeUser = escapeHtml(safeUsername);
   const msgCount = Array.isArray(messages) ? messages.length : 0;
@@ -847,13 +756,13 @@ function openAnalysisPanel(username, messages) {
       ? `<div style="color:#6B7280;font-size:11px;margin-bottom:8px;">Only ${msgCount} message(s) read — try scrolling the chat before analyzing</div>`
       : "";
 
-  const phoneVal = escapeHtml(detectedPhone ?? "");
-  const addrEscaped = escapeHtml(detectedAddress ?? "");
+  const phoneVal = escapeHtml(phoneDet ?? "");
+  const addrEscaped = escapeHtml(addrDet ?? "");
 
-  const phoneAutoStyle = detectedPhone ? "color:#16a34a;" : "color:#9CA3AF;";
-  const addrAutoStyle = detectedAddress ? "color:#16a34a;" : "color:#9CA3AF;";
-  const phoneAutoText = detectedPhone ? "✓ Auto-detected from chat" : "Not detected — enter manually";
-  const addrAutoText = detectedAddress ? "✓ Auto-detected from chat" : "Not detected — enter manually";
+  const phoneAutoStyle = phoneDet ? "color:#16a34a;" : "color:#9CA3AF;";
+  const addrAutoStyle = addrDet ? "color:#16a34a;" : "color:#9CA3AF;";
+  const phoneAutoText = phoneDet ? "✓ Auto-detected from chat" : "Not detected — enter manually";
+  const addrAutoText = addrDet ? "✓ Auto-detected from chat" : "Not detected — enter manually";
 
   closePanel();
   applyInstagramMainMargin();
@@ -904,17 +813,9 @@ function openAnalysisPanel(username, messages) {
   }
 }
 
-async function launchBuyerAnalysis() {
-  showExtractionLoadingPanel();
-  try {
-    await ensureChatHistoryLoaded();
-  } catch (_e) {
-    // Continue with whatever loaded.
-  }
-
-  const messages = await extractChatMessages();
+function launchBuyerAnalysis() {
   const username = extractBuyerUsername() || "unknown_buyer";
-  openAnalysisPanel(username, messages);
+  startCaptureMode(username);
 }
 
 function getTokenFromBackground() {
@@ -1251,7 +1152,12 @@ function displayResult(result) {
   const newBtn = document.getElementById("rs-new-analysis");
   if (newBtn) {
     newBtn.addEventListener("click", () => {
-      openAnalysisPanel(lastUsername, lastMessages);
+      openAnalysisPanel(
+        lastUsername,
+        lastMessages,
+        autoDetectPhone(lastMessages),
+        autoDetectAddress(lastMessages)
+      );
     });
   }
 }
