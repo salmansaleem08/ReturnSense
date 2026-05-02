@@ -9,7 +9,9 @@ export interface AddressResult {
   address_quality_score: number;
   address_found: boolean;
   address_types?: string[];
-  address_precision?: string;
+  address_precision?: string | null;
+  configured: boolean;
+  error?: string;
 }
 
 interface GeocodeResult {
@@ -19,24 +21,54 @@ interface GeocodeResult {
   address_components: Array<{ types: string[]; long_name: string; short_name: string }>;
 }
 
+const ADDRESS_FAIL: AddressResult = {
+  address_found: false,
+  address_formatted: null,
+  address_lat: null,
+  address_lng: null,
+  address_city: null,
+  address_province: null,
+  address_country: null,
+  address_postal_code: null,
+  address_quality_score: 0,
+  address_precision: null,
+  address_types: [],
+  configured: true,
+  error: "Geocoding request failed"
+};
+
 export async function validateAddress(rawAddress?: string | null): Promise<AddressResult | null> {
+  if (!process.env.GOOGLE_MAPS_API_KEY?.trim()) {
+    return {
+      address_found: false,
+      address_formatted: null,
+      address_lat: null,
+      address_lng: null,
+      address_city: null,
+      address_province: null,
+      address_country: null,
+      address_postal_code: null,
+      address_quality_score: 0,
+      address_precision: null,
+      address_types: [],
+      configured: false,
+      error: "GOOGLE_MAPS_API_KEY is not configured on the server"
+    };
+  }
+
   const trimmed = rawAddress?.trim();
   if (!trimmed) return null;
 
-  const mapsKey = process.env.GOOGLE_MAPS_API_KEY?.trim();
-  if (!mapsKey) {
-    return null;
-  }
-
   const encoded = encodeURIComponent(trimmed);
+
   let data: { status?: string; results?: unknown[] };
   try {
     const res = await fetch(
-      `https://maps.googleapis.com/maps/api/geocode/json?address=${encoded}&key=${mapsKey}`
+      `https://maps.googleapis.com/maps/api/geocode/json?address=${encoded}&key=${process.env.GOOGLE_MAPS_API_KEY.trim()}`
     );
     data = await res.json();
   } catch {
-    return null;
+    return { ...ADDRESS_FAIL };
   }
 
   if (data.status !== "OK" || !data.results?.length) {
@@ -47,7 +79,12 @@ export async function validateAddress(rawAddress?: string | null): Promise<Addre
       address_city: null,
       address_country: null,
       address_quality_score: 0,
-      address_found: false
+      address_found: false,
+      address_province: null,
+      address_postal_code: null,
+      address_precision: null,
+      address_types: [],
+      configured: true
     };
   }
 
@@ -70,7 +107,8 @@ export async function validateAddress(rawAddress?: string | null): Promise<Addre
     address_quality_score: qualityScore,
     address_found: true,
     address_types: result.types,
-    address_precision: result.geometry.location_type
+    address_precision: result.geometry.location_type,
+    configured: true
   };
 }
 
@@ -102,12 +140,10 @@ export function computeAddressQuality(rawAddress: string, geocodeResult: Geocode
 }
 
 export function getAddressRiskScore(addressResult?: AddressResult | null) {
-  /** No address submitted — do not penalize the score. */
-  if (!addressResult) {
-    return { score: 0, signals: [] };
+  if (!addressResult || addressResult.configured !== true) {
+    return { score: 0, signals: [] as Array<{ name: string; impact: number; description: string }> };
   }
 
-  /** Address was submitted but geocoding failed or returned nothing. */
   if (!addressResult.address_found) {
     return {
       score: 35,
