@@ -1,4 +1,6 @@
+import type { AddressResult } from "@/lib/validation/address";
 import { getAddressRiskScore } from "@/lib/validation/address";
+import type { PhoneResult } from "@/lib/validation/phone";
 import { getPhoneRiskScore } from "@/lib/validation/phone";
 
 interface ScoreInput {
@@ -9,7 +11,7 @@ interface ScoreInput {
   } | null;
   phoneResult: unknown;
   addressResult: unknown;
-  historicalData: Array<{ outcome: string }>;
+  historicalData: Array<{ outcome: string; outcome_marked_at?: string | null }>;
 }
 
 interface Signal {
@@ -17,6 +19,40 @@ interface Signal {
   signal_name: string;
   impact: number;
   description: string;
+}
+
+function getPhoneRiskScoreOrNeutral(phoneResult: unknown) {
+  const p = phoneResult as PhoneResult | null | undefined;
+  if (p == null || p.configured === false) {
+    return {
+      score: 50,
+      signals: [
+        {
+          name: "phone_validation_unavailable",
+          impact: 0,
+          description: "Phone validation service not configured — score is neutral"
+        }
+      ]
+    };
+  }
+  return getPhoneRiskScore(p);
+}
+
+function getAddressRiskScoreOrNeutral(addressResult: unknown) {
+  const a = addressResult as AddressResult | null | undefined;
+  if (a == null || a.configured === false) {
+    return {
+      score: 50,
+      signals: [
+        {
+          name: "address_validation_unavailable",
+          impact: 0,
+          description: "Address geocoding service not configured — score is neutral"
+        }
+      ]
+    };
+  }
+  return getAddressRiskScore(a);
 }
 
 export function computeFinalScore({ aiResult, phoneResult, addressResult, historicalData }: ScoreInput) {
@@ -32,7 +68,7 @@ export function computeFinalScore({ aiResult, phoneResult, addressResult, histor
     signals.push({ signal_type: "chat", signal_name: s, impact: 8, description: s })
   );
 
-  const { score: phoneRisk, signals: phoneSigs } = getPhoneRiskScore(phoneResult as never);
+  const { score: phoneRisk, signals: phoneSigs } = getPhoneRiskScoreOrNeutral(phoneResult);
   const phoneScore = Math.max(0, 100 - phoneRisk);
   weightedScore += phoneScore * 0.15;
   signals.push(
@@ -44,7 +80,7 @@ export function computeFinalScore({ aiResult, phoneResult, addressResult, histor
     }))
   );
 
-  const { score: addrRisk, signals: addrSigs } = getAddressRiskScore(addressResult as never);
+  const { score: addrRisk, signals: addrSigs } = getAddressRiskScoreOrNeutral(addressResult);
   const addrScore = Math.max(0, 100 - addrRisk);
   weightedScore += addrScore * 0.2;
   signals.push(
