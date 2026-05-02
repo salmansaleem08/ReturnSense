@@ -17,6 +17,24 @@ export interface AiStructuredResult {
   ai_raw_response: Record<string, unknown>;
 }
 
+/** Map AI output to `buyers` table columns only — extra fields belong in `ai_raw_response` jsonb. */
+export function buyerRowPayloadFromAi(ai: AiStructuredResult) {
+  return {
+    ai_trust_score: ai.ai_trust_score,
+    ai_risk_level: ai.ai_risk_level,
+    ai_hesitation_detected: ai.ai_hesitation_detected,
+    ai_buyer_seriousness: ai.ai_buyer_seriousness,
+    ai_reasons: ai.ai_reasons,
+    ai_raw_response: {
+      ...ai.ai_raw_response,
+      positive_signals: ai.positive_signals,
+      negative_signals: ai.negative_signals,
+      recommendation: ai.recommendation,
+      analyst_notes: ai.analyst_notes
+    } as Record<string, unknown>
+  };
+}
+
 export const SYSTEM_PROMPT = `
 You are a behavioral risk analyst for an e-commerce buyer verification system.
 Your job is to analyze Instagram buyer conversations and identify psychological

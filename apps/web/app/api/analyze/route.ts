@@ -1,4 +1,5 @@
 import { analyzeWithGemini } from "@/lib/ai/gemini";
+import { buyerRowPayloadFromAi } from "@/lib/ai/openrouter";
 import { logServerError } from "@/lib/api/log-server-error";
 import { apiError, apiSuccess, corsHeaders, withAuth } from "@/lib/api/response";
 import { getHistoricalData, saveBuyer, saveSignals } from "@/lib/db/buyers";
@@ -82,7 +83,7 @@ export const POST = withAuth(async ({ req, user }) => {
       address_raw: address,
       ...(phoneResult ?? {}),
       ...(addressResult ?? {}),
-      ...aiResult,
+      ...buyerRowPayloadFromAi(aiResult),
       final_trust_score: finalScore,
       final_risk_level: riskLevel,
       chat_snapshot: formatChatForStorage(messages)
