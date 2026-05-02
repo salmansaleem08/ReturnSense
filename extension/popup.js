@@ -58,38 +58,48 @@ function showLoginForm() {
     btn.textContent = "Logging in...";
     errEl.textContent = "";
 
-    try {
-      const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: SUPABASE_ANON_KEY
-        },
-        body: JSON.stringify({ email, password })
-      });
+    chrome.runtime.sendMessage(
+      {
+        type: "RS_SUPABASE_PASSWORD_LOGIN",
+        supabaseUrl: SUPABASE_URL,
+        anonKey: SUPABASE_ANON_KEY,
+        email,
+        password
+      },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          errEl.textContent = chrome.runtime.lastError.message || "Extension messaging failed.";
+          btn.disabled = false;
+          btn.textContent = "Log in";
+          return;
+        }
 
-      const data = await res.json();
+        if (!response?.ok) {
+          const d = response?.data;
+          errEl.textContent =
+            d?.error_description ||
+            d?.msg ||
+            d?.message ||
+            d?.error ||
+            response?.error ||
+            (response?.bodyPreview ? `Server error (${response?.status}).` : null) ||
+            "Login failed.";
+          btn.disabled = false;
+          btn.textContent = "Log in";
+          return;
+        }
 
-      if (data.error || !data.access_token) {
-        errEl.textContent = data.error_description || data.msg || data.error || "Login failed.";
-        btn.disabled = false;
-        btn.textContent = "Log in";
-        return;
+        const data = response.data;
+        const user = {
+          email: data.user?.email,
+          id: data.user?.id,
+          username: data.user?.user_metadata?.username
+        };
+        chrome.runtime.sendMessage({ type: "RS_LOGIN", session: data, user }, () => {
+          showLoggedIn(user);
+        });
       }
-
-      const user = {
-        email: data.user?.email,
-        id: data.user?.id,
-        username: data.user?.user_metadata?.username
-      };
-      chrome.runtime.sendMessage({ type: "RS_LOGIN", session: data, user }, () => {
-        showLoggedIn(user);
-      });
-    } catch (_e) {
-      errEl.textContent = "Network error. Check connection.";
-      btn.disabled = false;
-      btn.textContent = "Log in";
-    }
+    );
   });
 }
 
