@@ -960,9 +960,68 @@ async function submitForAnalysis({ messages, username, phone, address }) {
 /**
  * @param {Record<string, unknown>} result
  */
+function renderNetworkProfileBanner(result) {
+  const np = result?.network_profile;
+  if (!np || typeof np !== "object") {
+    return "";
+  }
+  const sev = String(np.trust_severity || "neutral").toLowerCase();
+  if (np.has_profile !== true) {
+    return `<div class="rs-network-banner rs-network-neutral" role="region" aria-label="Cross-seller network profile">
+      <div class="rs-network-eyebrow">Network profile</div>
+      <div class="rs-network-title">No cross-seller history yet</div>
+      <div class="rs-network-body">This Instagram handle has no marked outcomes from other ReturnSense sellers.</div>
+    </div>`;
+  }
+  const ratio = `${np.delivered} delivered · ${np.returned} returned · ${np.fake} fake`;
+  const sellers =
+    typeof np.distinct_sellers === "number" && np.distinct_sellers > 0
+      ? `${np.distinct_sellers} sellers contributed`
+      : "";
+  const scoreNet =
+    typeof np.network_trust_score === "number" ? `Trust ${np.network_trust_score}/100` : "";
+  const meta = [scoreNet, `${np.total_analyses} analyses`, sellers].filter(Boolean).join(" · ");
+  const title = typeof np.trust_label === "string" ? np.trust_label : "Network history";
+  return `<div class="rs-network-banner rs-network-${sev}" role="region" aria-label="Cross-seller network profile">
+    <div class="rs-network-eyebrow">Network profile</div>
+    <div class="rs-network-title">${escapeHtml(title)}</div>
+    <div class="rs-network-stats">${escapeHtml(ratio)}</div>
+    ${meta ? `<div class="rs-network-meta">${escapeHtml(meta)}</div>` : ""}
+  </div>`;
+}
+
+/**
+ * @param {Record<string, unknown>} result
+ */
+function renderConflictResolutionCard(result) {
+  const raw = result?.signal_conflicts_resolved;
+  if (!Array.isArray(raw) || raw.length === 0) return "";
+  const items = raw
+    .map((entry) => {
+      if (entry && typeof entry === "object") {
+        const rid = escapeHtml(String(entry.rule_id ?? ""));
+        const res = escapeHtml(String(entry.resolution ?? ""));
+        const fav = entry.favored ? escapeHtml(String(entry.favored)) : "";
+        return `<div class="rs-conflict-item"><span class="rs-conflict-rule">${rid}</span><p class="rs-conflict-text">${res}</p>${fav ? `<span class="rs-conflict-favor">Favored: ${fav}</span>` : ""}</div>`;
+      }
+      return `<div class="rs-conflict-item"><p class="rs-conflict-text">${escapeHtml(String(entry))}</p></div>`;
+    })
+    .join("");
+  return `<div class="rs-card">
+    <div class="rs-card-header">Signal conflict resolution</div>
+    <div class="rs-card-body rs-conflict-list">${items}</div>
+  </div>`;
+}
+
+/**
+ * @param {Record<string, unknown>} result
+ */
 function displayResult(result) {
   const body = document.getElementById("rs-panel-body");
   if (!body) return;
+
+  const networkBannerHtml = renderNetworkProfileBanner(result);
+  const conflictCardHtml = renderConflictResolutionCard(result);
 
   const scoreRaw = result?.trust_score;
   const score = typeof scoreRaw === "number" && !Number.isNaN(scoreRaw) ? scoreRaw : 0;
@@ -1186,6 +1245,7 @@ function displayResult(result) {
   const privacyFooter = `<div style="font-size:10px;color:#9CA3AF;text-align:center;padding:10px 4px 2px;line-height:1.45;border-top:1px solid #EFEFEF;margin-top:10px;">Conversation text is not stored. Only derived risk signals. Scores are advisory—you decide whether to ship. <a href="${API_BASE}/privacy" target="_blank" rel="noopener noreferrer" style="color:#6B7280;">Privacy policy</a></div>`;
 
   body.innerHTML = `
+    ${networkBannerHtml}
     <div class="rs-card">
       <div class="rs-card-body">
         <div class="rs-score-wrap">
@@ -1208,6 +1268,7 @@ function displayResult(result) {
       <div class="rs-card-body">${addressBlock}</div>
     </div>
 
+    ${conflictCardHtml}
     <div class="rs-card">
       <div class="rs-card-header">AI Behavioral Analysis</div>
       <div class="rs-card-body">

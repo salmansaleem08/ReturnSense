@@ -558,3 +558,101 @@ button.rs-outcome-btn:disabled {
   opacity: 0.45;
   cursor: default;
 }
+
+/* Cross-seller network profile (high-visibility risk band) */
+.rs-network-banner {
+  border-radius: 8px;
+  padding: 12px 14px;
+  border: 1px solid #e5e5e5;
+  margin-bottom: 2px;
+}
+.rs-network-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #737373;
+  margin-bottom: 4px;
+}
+.rs-network-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  line-height: 1.25;
+  margin-bottom: 6px;
+}
+.rs-network-stats {
+  font-size: 13px;
+  font-weight: 600;
+  color: #262626;
+}
+.rs-network-meta {
+  font-size: 11px;
+  color: #737373;
+  margin-top: 6px;
+  line-height: 1.35;
+}
+.rs-network-body {
+  font-size: 12px;
+  color: #525252;
+  line-height: 1.4;
+}
+.rs-network-neutral {
+  background: #f5f5f5;
+  border-color: #e5e5e5;
+}
+.rs-network-good {
+  background: #ecfdf3;
+  border-color: #86efac;
+}
+.rs-network-good .rs-network-title {
+  color: #166534;
+}
+.rs-network-warn {
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+.rs-network-warn .rs-network-title {
+  color: #92400e;
+}
+.rs-network-bad {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+.rs-network-bad .rs-network-title {
+  color: #991b1b;
+}
+
+.rs-conflict-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rs-conflict-item {
+  font-size: 12px;
+  line-height: 1.45;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.rs-conflict-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.rs-conflict-rule {
+  display: inline-block;
+  font-weight: 700;
+  font-size: 11px;
+  color: #374151;
+  margin-bottom: 4px;
+}
+.rs-conflict-text {
+  margin: 0;
+  color: #4b5563;
+}
+.rs-conflict-favor {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: #92400e;
+  margin-top: 4px;
+}
