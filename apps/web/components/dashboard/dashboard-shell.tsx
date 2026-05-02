@@ -43,8 +43,8 @@ function SidebarNav({
             className={cn(
               "flex h-nav-item min-h-touch items-center gap-4 rounded-[var(--radius-md)] px-3 text-sm transition-colors",
               active
-                ? "font-semibold text-foreground"
-                : "font-normal text-foreground hover:bg-muted"
+                ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
+                : "font-normal text-sidebar-foreground hover:bg-sidebar-accent/80"
             )}
           >
             <Icon className="h-6 w-6 shrink-0 stroke-[1.75]" aria-hidden />
@@ -75,12 +75,8 @@ export function DashboardShell({ children, email, plan }: DashboardShellProps) {
       {/* Mobile header — Instagram-style thin bar */}
       <header className="sticky top-0 z-40 flex h-[52px] items-center justify-between border-b border-border bg-background px-4 md:hidden">
         <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-          <span
-            className="flex h-8 w-8 items-center justify-center rounded-xs bg-gradient-to-br from-[#FCAF45] via-[#E1306C] to-[#833AB4] text-[11px] font-bold text-white"
-            aria-hidden
-          >
-            RS
-          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="" width={32} height={32} className="h-8 w-8 rounded-md" />
           ReturnSense
         </Link>
         <Button
@@ -97,22 +93,18 @@ export function DashboardShell({ children, email, plan }: DashboardShellProps) {
 
       {/* Desktop sidebar — fixed 245px */}
       <aside
-        className="fixed inset-y-0 left-0 z-30 hidden w-sidebar flex-col border-r border-border bg-background md:flex"
+        className="fixed inset-y-0 left-0 z-30 hidden w-sidebar flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex"
         aria-hidden={false}
       >
         <div className="flex h-[52px] shrink-0 items-center px-6 pt-4">
           <Link href="/dashboard" className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-            <span
-              className="flex h-9 w-9 items-center justify-center rounded-xs bg-gradient-to-br from-[#FCAF45] via-[#E1306C] to-[#833AB4] text-xs font-bold text-white"
-              aria-hidden
-            >
-              RS
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.svg" alt="" width={36} height={36} className="h-9 w-9 rounded-md" />
             <span className="hidden lg:inline">ReturnSense</span>
           </Link>
         </div>
         <SidebarNav pathname={pathname} />
-        <div className="mt-auto border-t border-border p-4">
+        <div className="mt-auto border-t border-sidebar-border p-4">
           <div className="flex items-center gap-3 px-2">
             <div
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground"
@@ -148,15 +140,15 @@ export function DashboardShell({ children, email, plan }: DashboardShellProps) {
             aria-label="Close menu"
             onClick={closeMobile}
           />
-          <aside className="absolute inset-y-0 left-0 flex w-[260px] max-w-[85vw] flex-col border-r border-border bg-background shadow-ig">
-            <div className="flex h-[52px] items-center justify-between border-b border-border px-4">
+          <aside className="absolute inset-y-0 left-0 flex w-[260px] max-w-[85vw] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-sm">
+            <div className="flex h-[52px] items-center justify-between border-b border-sidebar-border px-4">
               <span className="text-lg font-semibold">Menu</span>
               <Button type="button" variant="ghost" size="icon-sm" onClick={closeMobile} aria-label="Close">
                 <span className="text-lg leading-none">×</span>
               </Button>
             </div>
             <SidebarNav pathname={pathname} onNavigate={closeMobile} />
-            <div className="mt-auto border-t border-border p-4">
+            <div className="mt-auto border-t border-sidebar-border p-4">
               <Button variant="outline" size="sm" className="w-full font-semibold" onClick={handleLogout}>
                 <LogOut className="mr-2 h-4 w-4" />
                 Log out
