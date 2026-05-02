@@ -90,6 +90,12 @@ function igRowLooksLikeIncomingBuyer(rowOrEl) {
   return false;
 }
 
+/** Incoming bubbles: interactive wrapper `role="button"` — must run BEFORE span/DOM heuristics (IG uses spans on both sides). */
+function igLayerIncomingRoleButton(el) {
+  if (!igRowLooksLikeIncomingBuyer(el)) return null;
+  return { role: "buyer", layoutSource: "ig-incoming-role-button", confidence: 0.93 };
+}
+
 /** Set localStorage RS_ATTRIB_VERBOSE=1 to log per-message layer + confidence in the console. */
 function rsAttribVerboseEnabled() {
   try {
@@ -205,13 +211,26 @@ function igLayerAvatarPrimary(el) {
     const row = typeof el.closest === "function" ? el.closest('[role="row"]') : null;
     if (!row) return null;
     const bubbleRect = rsPickMessageBubbleRect(el);
+    const bubbleElForSkip = rsPickMessageBubbleElement(el);
     const refLeft = bubbleRect ? bubbleRect.left : null;
+    let rowRect = null;
+    try {
+      rowRect = row.getBoundingClientRect();
+    } catch (_e) {
+      rowRect = null;
+    }
     const imgs = row.querySelectorAll("img");
     for (let i = 0; i < imgs.length; i++) {
       const img = imgs[i];
+      if (bubbleElForSkip && bubbleElForSkip.contains(img)) continue;
       const r = img.getBoundingClientRect?.();
-      if (!r || r.width < 22 || r.width > 58 || r.height < 22 || r.height > 58) continue;
-      if (refLeft != null && r.right <= refLeft + 28 && r.left < refLeft) {
+      if (!r || r.width < 20 || r.width > 62 || r.height < 20 || r.height > 62) continue;
+      const cx = r.left + r.width / 2;
+      const inRowLeadingEdge =
+        rowRect && rowRect.width > 40 && cx < rowRect.left + rowRect.width * 0.42;
+      const leftOfBubble =
+        refLeft != null && r.right <= refLeft + 32 && r.left < refLeft + 4;
+      if (leftOfBubble || inRowLeadingEdge) {
         return { role: "buyer", layoutSource: "ig-avatar-img", confidence: 0.92 };
       }
     }
@@ -219,9 +238,14 @@ function igLayerAvatarPrimary(el) {
     for (let j = 0; j < divs.length; j++) {
       const d = divs[j];
       const r = d.getBoundingClientRect?.();
-      if (!r || r.width < 26 || r.width > 54 || r.height < 26 || r.height > 54) continue;
-      if (Math.abs(r.width - r.height) > 8) continue;
-      if (refLeft != null && r.right <= refLeft + 22 && r.left < refLeft - 2) {
+      if (!r || r.width < 24 || r.width > 56 || r.height < 24 || r.height > 56) continue;
+      if (Math.abs(r.width - r.height) > 10) continue;
+      const cx = r.left + r.width / 2;
+      const inRowLeadingEdge =
+        rowRect && rowRect.width > 40 && cx < rowRect.left + rowRect.width * 0.4;
+      const leftOfBubble =
+        refLeft != null && r.right <= refLeft + 24 && r.left < refLeft;
+      if (leftOfBubble || inRowLeadingEdge) {
         return { role: "buyer", layoutSource: "ig-avatar-slot", confidence: 0.9 };
       }
     }
@@ -234,6 +258,7 @@ function igLayerAvatarPrimary(el) {
 /** Structural: outgoing often wraps body copy in a substantive span; incoming may present as div-only paths. */
 function igLayerStructuralPresentation(el) {
   try {
+    if (igRowLooksLikeIncomingBuyer(el)) return null;
     const bubbleEl = rsPickMessageBubbleElement(el);
     if (!bubbleEl) return null;
     const fullText = (bubbleEl.innerText || "").trim();
@@ -245,12 +270,12 @@ function igLayerStructuralPresentation(el) {
       if (t.length > maxSpanLen) maxSpanLen = t.length;
     }
     const spanDominates =
-      maxSpanLen >= Math.max(10, fullText.length * 0.34) && maxSpanLen >= 8;
+      maxSpanLen >= Math.max(12, fullText.length * 0.38) && maxSpanLen >= 10;
     if (spanDominates) {
-      return { role: "seller", layoutSource: "ig-struct-span-text", confidence: 0.8 };
+      return { role: "seller", layoutSource: "ig-struct-span-text", confidence: 0.79 };
     }
-    if (maxSpanLen < 6 && bubbleEl.querySelector("div")) {
-      return { role: "buyer", layoutSource: "ig-struct-div-body", confidence: 0.78 };
+    if (maxSpanLen < 5 && bubbleEl.querySelector("div")) {
+      return { role: "buyer", layoutSource: "ig-struct-div-body", confidence: 0.76 };
     }
   } catch (_e) {
     /* ignore */
@@ -429,13 +454,13 @@ function harvestVisibleMessages() {
 
       /**
        * Instagram Web DM attribution order:
-       * 1) Avatar / square slot left of bubble → buyer (incoming).
-       * 2) Structural span-vs-div presentation (durable vs obfuscated class names).
+       * 1) Avatar / square slot in leading edge of row → buyer (incoming).
+       * 2) role="button" on bubble (incoming) — BEFORE span/DOM heuristics (IG uses spans on both sides).
        * 3) --x-width row spacers.
-       * 4) Optional obfuscated class fingerprints (may need periodic updates).
-       * 5) role="button" wrappers on incoming bubbles.
-       * 6) Bubble X vs scrollable chat column (left/right 40% zones), not full viewport.
-       * 7) Flex justify-content, then viewport midline last resort.
+       * 4) Optional obfuscated class fingerprints.
+       * 5) Structural span-vs-div (skipped when role=button would apply).
+       * 6) Chat column zones + midline split in gray band; flex vs column mid (not flex-end→seller only).
+       * 7) Viewport last resort.
        */
       let flexEndDepth = -1;
       let flexStartDepth = -1;
@@ -464,9 +489,10 @@ function harvestVisibleMessages() {
 
       const early =
         igLayerAvatarPrimary(el) ||
-        igLayerStructuralPresentation(el) ||
+        igLayerIncomingRoleButton(el) ||
         igLayer2SpacerSignal(el) ||
-        igLayer1ClassFingerprint(el);
+        igLayer1ClassFingerprint(el) ||
+        igLayerStructuralPresentation(el);
 
       let role = "unknown";
       let layoutSource = "none";
@@ -477,9 +503,6 @@ function harvestVisibleMessages() {
         role = early.role;
         layoutSource = early.layoutSource;
         presetConfidence = early.confidence;
-      } else if (igRowLooksLikeIncomingBuyer(el)) {
-        role = "buyer";
-        layoutSource = "ig-incoming-role-button";
       }
 
       let direction = "ltr";
@@ -496,21 +519,28 @@ function harvestVisibleMessages() {
         const leftEdge = colRect.left;
         const w = colRect.width;
         const rel = (cx - leftEdge) / w;
+        const mid = leftEdge + w * 0.5;
         if (!isRtl) {
-          if (rel <= 0.4) {
+          if (rel <= 0.38) {
             role = "buyer";
-            layoutSource = "geometry-chat-column-left40";
-          } else if (rel >= 0.6) {
+            layoutSource = "geometry-chat-column-left38";
+          } else if (rel >= 0.62) {
             role = "seller";
-            layoutSource = "geometry-chat-column-right40";
+            layoutSource = "geometry-chat-column-right38";
+          } else {
+            role = cx >= mid ? "seller" : "buyer";
+            layoutSource = "geometry-chat-column-midsplit";
           }
         } else {
-          if (rel >= 0.6) {
+          if (rel >= 0.62) {
             role = "buyer";
-            layoutSource = "geometry-chat-column-rtl-right40";
-          } else if (rel <= 0.4) {
+            layoutSource = "geometry-chat-column-rtl-right38";
+          } else if (rel <= 0.38) {
             role = "seller";
-            layoutSource = "geometry-chat-column-rtl-left40";
+            layoutSource = "geometry-chat-column-rtl-left38";
+          } else {
+            role = cx < mid ? "seller" : "buyer";
+            layoutSource = "geometry-chat-column-midsplit-rtl";
           }
         }
       }
@@ -519,9 +549,15 @@ function harvestVisibleMessages() {
         if (flexEndDepth >= 0 && flexStartDepth >= 0 && flexEndDepth !== flexStartDepth) {
           role = flexEndDepth > flexStartDepth ? "seller" : "buyer";
           layoutSource = role === "seller" ? "flex-end" : "flex-start";
-        } else if (flexEndDepth >= 0) {
-          role = "seller";
-          layoutSource = "flex-end";
+        } else if (flexEndDepth >= 0 && bubbleRect && colRect.width > 40) {
+          const mid = colRect.left + colRect.width / 2;
+          const cx = bubbleRect.left + bubbleRect.width / 2;
+          if (!isRtl) {
+            role = cx >= mid ? "seller" : "buyer";
+          } else {
+            role = cx < mid ? "seller" : "buyer";
+          }
+          layoutSource = "flex-end-vs-column-mid";
         }
       }
 
@@ -548,14 +584,23 @@ function harvestVisibleMessages() {
         attribution_confidence = presetConfidence;
         attribution_signals.push(layoutSource);
       } else if (layoutSource === "ig-incoming-role-button") {
-        attribution_confidence = 0.91;
+        attribution_confidence = 0.93;
         attribution_signals.push("ig-incoming-role-button");
       } else if (
         layoutSource.startsWith("geometry-chat-column") ||
         layoutSource === "geometry-thread" ||
         layoutSource === "geometry-thread-rtl"
       ) {
-        attribution_confidence = layoutSource.startsWith("geometry-chat-column") ? 0.86 : 0.88;
+        if (
+          layoutSource === "geometry-chat-column-midsplit" ||
+          layoutSource === "geometry-chat-column-midsplit-rtl"
+        ) {
+          attribution_confidence = 0.74;
+        } else if (layoutSource.startsWith("geometry-chat-column")) {
+          attribution_confidence = 0.86;
+        } else {
+          attribution_confidence = 0.88;
+        }
         attribution_signals.push(layoutSource);
       } else if (layoutSource === "geometry-viewport") {
         attribution_confidence = 0.62;
@@ -563,6 +608,9 @@ function harvestVisibleMessages() {
       } else if (layoutSource === "flex-end" || layoutSource === "flex-start") {
         attribution_confidence = flexEndDepth >= 0 && flexStartDepth >= 0 ? 0.78 : 0.82;
         attribution_signals.push(`layout:${layoutSource}`);
+      } else if (layoutSource === "flex-end-vs-column-mid") {
+        attribution_confidence = 0.76;
+        attribution_signals.push(layoutSource);
         if (flexEndDepth >= 0) attribution_signals.push(`flex-end@d${flexEndDepth}`);
         if (flexStartDepth >= 0) attribution_signals.push(`flex-start@d${flexStartDepth}`);
       } else {
