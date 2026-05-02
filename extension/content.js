@@ -486,40 +486,6 @@ function autoDetectAddress(messages) {
   return above[0].text;
 }
 
-const IG_USERNAME_RESERVED = new Set([
-  "p",
-  "reel",
-  "reels",
-  "stories",
-  "explore",
-  "direct",
-  "accounts",
-  "legal",
-  "about",
-  "popular",
-  "tagged",
-  "tv",
-  "common",
-  "www"
-]);
-
-function extractUsernameFromPageLinks() {
-  const main = document.querySelector("[role='main']");
-  const scope = main || document;
-  const links = scope.querySelectorAll('a[href*="instagram.com/"]');
-  let found = null;
-  links.forEach((a) => {
-    const href = a.getAttribute("href") || "";
-    const m = href.match(/instagram\.com\/([A-Za-z0-9._]+)\/?(?:\?|#|$)/);
-    if (!m) return;
-    const u = m[1];
-    if (IG_USERNAME_RESERVED.has(u.toLowerCase())) return;
-    if (u.length < 2 || u.length > 33) return;
-    found = u;
-  });
-  return found;
-}
-
 function findChatHeaderToolbar() {
   return queryWithFallbacks([
     "[role='main'] header",
@@ -536,129 +502,134 @@ function findChatHeaderToolbar() {
   ]);
 }
 
-/** Reserved title segments that are not Instagram usernames. */
-const TITLE_SKIP = new Set(
-  ["instagram", "direct", "chats", "inbox", ""].map((s) => s.toLowerCase())
+/** Single-word forbidden labels (Instagram chrome), case-insensitive. */
+const USERNAME_FORBIDDEN = new Set(
+  [
+    "instagram",
+    "direct",
+    "inbox",
+    "chats",
+    "messages",
+    "home",
+    "explore",
+    "reels",
+    "notifications",
+    "create"
+  ].map((s) => s.toLowerCase())
 );
 
-/** Strategy 2: username-like token (word chars, underscores, dots). */
-function looksLikeUsernameToken(text) {
-  if (!text || typeof text !== "string") return false;
-  const t = text.trim();
-  if (!t.length || t.includes(" ") || t.length > 30 || t.length < 1) return false;
-  return /^[\w.]+$/.test(t);
+/**
+ * Normalizes and validates a username candidate per pre-filtering rules.
+ * @param {string|null|undefined} raw
+ * @returns {string|null}
+ */
+function cleanUsernameCandidate(raw) {
+  if (raw == null || typeof raw !== "string") return null;
+  let t = raw.replace(/^\(\d+\)\s*/, "").replace(/^@/, "").trim();
+  if (!t || t.includes("\n")) return null;
+  if (t.length < 1 || t.length > 30) return null;
+  if (USERNAME_FORBIDDEN.has(t.toLowerCase())) return null;
+  return t;
+}
+
+/**
+ * @param {number|string} strategyNum
+ * @param {string|null} result
+ */
+function logUsernameStrategyResult(strategyNum, result) {
+  console.log("[RS] Username strategy " + strategyNum + " result:", result);
 }
 
 function extractBuyerUsername() {
-  /** @param {number} n @param {string|null|undefined} found */
-  const logStrategy = (n, found) => {
-    console.log(`[RS] Username strategy ${n}: "${found ?? null}"`);
-  };
-
   // Strategy 1 — Page title
   try {
-    const title = typeof document.title === "string" ? document.title : "";
-    const parts = title.split(" • ");
-    const first = (parts[0] || "").trim();
-    if (first && !TITLE_SKIP.has(first.toLowerCase()) && first.length < 50) {
-      logStrategy(1, first);
-      return first.replace(/^@/, "");
-    }
-    logStrategy(1, null);
+    const titleRaw = typeof document.title === "string" ? document.title : "";
+    const firstSeg = (titleRaw.replace(/^\(\d+\)\s*/, "").split(" • ")[0] || "").trim();
+    const c = cleanUsernameCandidate(firstSeg);
+    logUsernameStrategyResult(1, c);
+    if (c) return c;
   } catch (_e) {
-    logStrategy(1, null);
+    logUsernameStrategyResult(1, null);
   }
 
-  // Strategy 2 — Active sidebar item in Chats nav
+  // Strategy 2 — URL path
   try {
-    let chatNav = null;
-    const all = document.querySelectorAll("[aria-label]");
-    for (let i = 0; i < all.length; i++) {
-      const el = all[i];
-      const label = el?.getAttribute?.("aria-label") || "";
-      if (/chats/i.test(label)) {
-        chatNav = el;
-        break;
+    const path = window.location?.pathname || "";
+    const segments = path.split("/").filter(Boolean);
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      if (!seg) continue;
+      const low = seg.toLowerCase();
+      if (low === "direct" || low === "t" || low === "inbox") continue;
+      if (/^\d+$/.test(seg) && seg.length > 6) continue;
+      if (seg.length < 1 || seg.length > 30) continue;
+      if (!/^[\w._]+$/.test(seg)) continue;
+      const c = cleanUsernameCandidate(seg);
+      if (c) {
+        logUsernameStrategyResult(2, c);
+        return c;
       }
     }
-    const searchRoots = [];
-    if (chatNav) searchRoots.push(chatNav);
-    searchRoots.push(document.body);
-
-    for (let r = 0; r < searchRoots.length; r++) {
-      const root = searchRoots[r];
-      if (!root?.querySelectorAll) continue;
-      const items = root.querySelectorAll('[role="listitem"]');
-      for (let j = 0; j < items.length; j++) {
-        const item = items[j];
-        if (!item) continue;
-        const selected =
-          item.getAttribute?.("aria-selected") === "true" ||
-          item.getAttribute?.("aria-current") === "true";
-        if (!selected) continue;
-        const walker = document.createTreeWalker(item, NodeFilter.SHOW_TEXT, null);
-        let node = walker.nextNode();
-        while (node) {
-          const raw = node.textContent != null ? String(node.textContent) : "";
-          const chunk = raw.trim();
-          if (looksLikeUsernameToken(chunk)) {
-            logStrategy(2, chunk);
-            return chunk.replace(/^@/, "");
-          }
-          node = walker.nextNode();
-        }
-      }
-    }
-    logStrategy(2, null);
+    logUsernameStrategyResult(2, null);
   } catch (_e) {
-    logStrategy(2, null);
+    logUsernameStrategyResult(2, null);
   }
 
-  // Strategy 3 — Header anchor tags in main
-  try {
-    const main = document.querySelector('[role="main"]');
-    if (main?.querySelectorAll) {
-      const anchors = main.querySelectorAll("a[href]");
-      const rejectSeg = new Set(["direct", "inbox", "p", "reel", "explore", "accounts", "stories", "tv", "audio"]);
-      for (let i = 0; i < anchors.length; i++) {
-        const a = anchors[i];
-        const href = a?.getAttribute?.("href") || "";
-        if (!href) continue;
-        let path = "";
-        try {
-          path = new URL(href, window.location.origin).pathname || "";
-        } catch (_e2) {
-          continue;
-        }
-        const segments = path.split("/").filter(Boolean);
-        for (let s = 0; s < segments.length; s++) {
-          const seg = segments[s];
-          if (!seg || rejectSeg.has(seg.toLowerCase())) continue;
-          if (seg.length > 30) continue;
-          if (/\.(jpe?g|png|gif|webp|mp4|mov)$/i.test(seg)) continue;
-          logStrategy(3, seg);
-          return seg;
-        }
-      }
+  // Strategy 3 — Active conversation header
+  const headerSelectors = [
+    '[role="main"] header h2',
+    '[role="main"] header [dir="auto"]',
+    '[role="main"] [data-testid="conversation-info-header-title"]',
+    '[role="main"] h1',
+    '[role="main"] h2',
+    '[role="main"] h3'
+  ];
+  for (let si = 0; si < headerSelectors.length; si++) {
+    try {
+      const el = document.querySelector(headerSelectors[si]);
+      const inner = el && typeof el.innerText === "string" ? el.innerText.trim() : "";
+      const c = cleanUsernameCandidate(inner);
+      logUsernameStrategyResult(3, c);
+      if (c) return c;
+    } catch (_e) {
+      logUsernameStrategyResult(3, null);
     }
-    logStrategy(3, null);
-  } catch (_e) {
-    logStrategy(3, null);
   }
+  logUsernameStrategyResult(3, null);
 
-  // Strategy 4 — Heading element in main
+  // Strategy 4 — Active sidebar listitem (visual selection)
   try {
-    const heading = document.querySelector('[role="main"] h1, [role="main"] [role="heading"]');
-    if (heading) {
-      const inner = typeof heading.innerText === "string" ? heading.innerText.trim() : "";
-      if (inner && inner.length > 0 && inner.length < 50 && !/\n/.test(inner)) {
-        logStrategy(4, inner);
-        return inner.replace(/^@/, "");
+    const items = document.querySelectorAll('[role="listitem"]');
+    for (let j = 0; j < items.length; j++) {
+      const item = items[j];
+      if (!item) continue;
+      const ariaSel =
+        item.getAttribute?.("aria-selected") === "true" || item.querySelector?.("[aria-current='true']") != null;
+      const cs = window.getComputedStyle(item);
+      const bg = cs?.backgroundColor || "";
+      const whiteish =
+        bg === "rgb(255, 255, 255)" ||
+        bg === "rgba(255, 255, 255, 1)" ||
+        bg === "rgba(0, 0, 0, 0)" ||
+        bg === "transparent";
+      const visualSel = !whiteish && Boolean(bg);
+      if (!ariaSel && !visualSel) continue;
+
+      const walker = document.createTreeWalker(item, NodeFilter.SHOW_TEXT, null);
+      let node = walker.nextNode();
+      while (node) {
+        const chunk = (node.textContent != null ? String(node.textContent) : "").trim();
+        if (/^[\w._]{1,30}$/.test(chunk)) {
+          const c = cleanUsernameCandidate(chunk);
+          logUsernameStrategyResult(4, c);
+          if (c) return c;
+        }
+        node = walker.nextNode();
       }
     }
-    logStrategy(4, null);
+    logUsernameStrategyResult(4, null);
   } catch (_e) {
-    logStrategy(4, null);
+    logUsernameStrategyResult(4, null);
   }
 
   // Strategy 5 — Aria-label in main
@@ -667,43 +638,42 @@ function extractBuyerUsername() {
     if (main?.querySelectorAll) {
       const labeled = main.querySelectorAll("[aria-label]");
       const re = /(?:conversation with|chat with|messaging with)\s+(.+)/i;
-      for (let i = 0; i < labeled.length; i++) {
-        const el = labeled[i];
-        const label = el?.getAttribute?.("aria-label") || "";
+      for (let k = 0; k < labeled.length; k++) {
+        const label = labeled[k]?.getAttribute?.("aria-label") || "";
         const m = label.match(re);
-        if (m && m[1]) {
-          const name = m[1].trim();
-          if (name && name.length < 50) {
-            logStrategy(5, name);
-            return name.replace(/^@/, "");
-          }
+        if (m?.[1]) {
+          const c = cleanUsernameCandidate(m[1].trim());
+          logUsernameStrategyResult(5, c);
+          if (c) return c;
         }
       }
     }
-    logStrategy(5, null);
+    logUsernameStrategyResult(5, null);
   } catch (_e) {
-    logStrategy(5, null);
+    logUsernameStrategyResult(5, null);
   }
 
-  // Strategy 6 — URL path parsing
+  // Strategy 6 — dir="auto" username-shaped text in main
   try {
-    const path = window.location?.pathname || "";
-    const segments = path.split("/").filter(Boolean);
-    const reject = new Set(["direct", "inbox", "t", "p", "reel", "explore", "stories"]);
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i];
-      if (!seg || reject.has(seg.toLowerCase())) continue;
-      if (/^\d{7,}$/.test(seg)) continue;
-      if (seg.length >= 1 && seg.length <= 30) {
-        logStrategy(6, seg);
-        return seg;
+    const mainEl = document.querySelector('[role="main"]');
+    if (mainEl?.querySelectorAll) {
+      const autos = mainEl.querySelectorAll('[dir="auto"]');
+      for (let a = 0; a < autos.length; a++) {
+        const el = autos[a];
+        const inner = el && typeof el.innerText === "string" ? el.innerText.trim() : "";
+        if (!inner || inner.length > 30 || inner.includes("\n")) continue;
+        if (!/^[\w._]+$/.test(inner)) continue;
+        const c = cleanUsernameCandidate(inner);
+        logUsernameStrategyResult(6, c);
+        if (c) return c;
       }
     }
-    logStrategy(6, null);
+    logUsernameStrategyResult(6, null);
   } catch (_e) {
-    logStrategy(6, null);
+    logUsernameStrategyResult(6, null);
   }
 
+  logUsernameStrategyResult("final", "unknown_buyer");
   return "unknown_buyer";
 }
 
