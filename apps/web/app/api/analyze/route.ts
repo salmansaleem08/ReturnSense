@@ -19,6 +19,8 @@ import { validateAddress } from "@/lib/validation/address";
 import type { PhoneResult } from "@/lib/validation/phone";
 import { validatePhone } from "@/lib/validation/phone";
 import { logAttributionSummary, summarizeAttribution, type AnalyzedMessage } from "@/lib/analysis/attribution";
+import { getNetworkIgStats } from "@/lib/network/network-layer";
+import { getSignalWeightMap } from "@/lib/network/signal-learning";
 
 /** Only columns that exist on `public.buyers` — PostgREST rejects unknown keys. */
 function buyerPhoneDb(p: PhoneResult & { phone_valid: boolean }) {
@@ -269,7 +271,9 @@ export const POST = withAuth(async ({ req, user }) => {
           historical_data: historicalData ?? [],
           signals,
           cached: true,
-          dashboard_url: `${appBase}/dashboard/buyers/${cachedBuyer.id}`
+          dashboard_url: `${appBase}/dashboard/buyers/${cachedBuyer.id}`,
+          disclaimer:
+            "Advisory only. ReturnSense does not block buyers or take automatic action—you decide whether to ship."
         },
         { headers: corsHeaders }
       );
@@ -280,7 +284,11 @@ export const POST = withAuth(async ({ req, user }) => {
       return apiError("Monthly limit reached. Upgrade plan.", 429);
     }
 
-    const historicalData = await getHistoricalData(phoneStr || null, username);
+    const [historicalData, networkIg, signalWeightMap] = await Promise.all([
+      getHistoricalData(phoneStr || null, username),
+      getNetworkIgStats(username),
+      getSignalWeightMap()
+    ]);
 
     const phoneNotProvided: PhoneResult = {
       phone_valid: null,
@@ -332,7 +340,9 @@ export const POST = withAuth(async ({ req, user }) => {
       addressResult,
       historicalData,
       chatMessages: messages,
-      buyerScoringCount: attribCounts.buyer_for_scoring
+      buyerScoringCount: attribCounts.buyer_for_scoring,
+      networkIgFakeCount: networkIg?.fake_count ?? 0,
+      signalWeightMap
     });
 
     const phoneDbPayload =
@@ -403,7 +413,9 @@ export const POST = withAuth(async ({ req, user }) => {
         historical_data: historicalData ?? [],
         signals,
         cached: false,
-        dashboard_url: `${appBase}/dashboard/buyers/${buyer.id}`
+        dashboard_url: `${appBase}/dashboard/buyers/${buyer.id}`,
+        disclaimer:
+          "Advisory only. ReturnSense does not block buyers or take automatic action—you decide whether to ship."
       },
       { headers: corsHeaders }
     );

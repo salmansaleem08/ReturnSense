@@ -10,15 +10,34 @@ export const GET = withAuth(async ({ user }) => {
   try {
     const [{ count: totalAnalyses = 0 }, { data: scoreRows = [] }, { count: scams = 0 }, { count: highRisk = 0 }, { count: pending = 0 }, quota] =
       await Promise.all([
-        supabaseAdmin.from("buyers").select("*", { count: "exact", head: true }).eq("seller_id", user.id),
-        supabaseAdmin.from("buyers").select("final_trust_score,final_risk_level,outcome").eq("seller_id", user.id),
-        supabaseAdmin.from("buyers").select("*", { count: "exact", head: true }).eq("seller_id", user.id).eq("outcome", "fake"),
         supabaseAdmin
           .from("buyers")
           .select("*", { count: "exact", head: true })
           .eq("seller_id", user.id)
+          .is("deleted_at", null),
+        supabaseAdmin
+          .from("buyers")
+          .select("final_trust_score,final_risk_level,outcome")
+          .eq("seller_id", user.id)
+          .is("deleted_at", null),
+        supabaseAdmin
+          .from("buyers")
+          .select("*", { count: "exact", head: true })
+          .eq("seller_id", user.id)
+          .is("deleted_at", null)
+          .eq("outcome", "fake"),
+        supabaseAdmin
+          .from("buyers")
+          .select("*", { count: "exact", head: true })
+          .eq("seller_id", user.id)
+          .is("deleted_at", null)
           .in("final_risk_level", ["high", "critical"]),
-        supabaseAdmin.from("buyers").select("*", { count: "exact", head: true }).eq("seller_id", user.id).eq("outcome", "pending"),
+        supabaseAdmin
+          .from("buyers")
+          .select("*", { count: "exact", head: true })
+          .eq("seller_id", user.id)
+          .is("deleted_at", null)
+          .eq("outcome", "pending"),
         checkQuota(user.id, user.email)
       ]);
 
@@ -39,6 +58,7 @@ export const GET = withAuth(async ({ user }) => {
       .from("buyers")
       .select("created_at")
       .eq("seller_id", user.id)
+      .is("deleted_at", null)
       .gte("created_at", since.toISOString());
 
     const byDay: Record<string, number> = {};

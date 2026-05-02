@@ -20,6 +20,7 @@ export async function findBuyerByConversationHash(sellerId: string, conversation
     .select("*")
     .eq("seller_id", sellerId)
     .eq("conversation_hash", conversationHash)
+    .is("deleted_at", null)
     .maybeSingle();
   if (error) throw new Error(error.message);
   return data;
@@ -64,6 +65,7 @@ export async function getBuyers(sellerId: string, page = 1, limit = 20) {
     .from("buyers")
     .select("*,risk_signals(count)", { count: "exact" })
     .eq("seller_id", sellerId)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .range(from, to);
 
@@ -83,6 +85,7 @@ export async function getBuyerById(buyerId: string, sellerId: string) {
     .select("*,risk_signals(*)")
     .eq("id", buyerId)
     .eq("seller_id", sellerId)
+    .is("deleted_at", null)
     .single();
   if (error) throw new Error(error.message);
   return data;
@@ -107,5 +110,19 @@ export async function updateOutcome(
     .single();
 
   if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function softDeleteBuyer(buyerId: string, sellerId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("buyers")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", buyerId)
+    .eq("seller_id", sellerId)
+    .is("deleted_at", null)
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Analysis not found or already removed");
   return data;
 }

@@ -10,8 +10,12 @@ export const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization"
 };
 
-export function apiSuccess(data: unknown, status = 200) {
-  return Response.json(data, { status, headers: corsHeaders });
+export function apiSuccess(
+  data: unknown,
+  status = 200,
+  headers: Record<string, string> = corsHeaders
+) {
+  return Response.json(data, { status, headers });
 }
 
 export function apiError(message: string, status = 400) {

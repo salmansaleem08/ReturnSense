@@ -16,6 +16,10 @@ interface ScoreInput {
   chatMessages?: Array<{ role: string; text: string }>;
   /** High-confidence buyer lines only — excludes uncertain/seller from behavioral sampling thresholds. */
   buyerScoringCount?: number;
+  /** Cross-seller hashed IG aggregates — advisory cap only. */
+  networkIgFakeCount?: number;
+  /** Per-signal multiplier after MIN observations (learning layer); absent keys default to 1. */
+  signalWeightMap?: Record<string, number>;
 }
 
 interface Signal {
@@ -59,56 +63,72 @@ function getAddressRiskScoreOrNeutral(addressResult: unknown) {
   return getAddressRiskScore(a);
 }
 
+function wmap(name: string, m?: Record<string, number>): number {
+  const v = m?.[name];
+  return typeof v === "number" && v > 0 ? v : 1;
+}
+
 export function computeFinalScore({
   aiResult,
   phoneResult,
   addressResult,
   historicalData,
   chatMessages,
-  buyerScoringCount
+  buyerScoringCount,
+  networkIgFakeCount,
+  signalWeightMap
 }: ScoreInput) {
   const signals: Signal[] = [];
   let weightedScore = 0;
+  const wm = signalWeightMap;
 
   const aiScore = aiResult?.ai_trust_score ?? 50;
   weightedScore += aiScore * 0.45;
-  (aiResult?.negative_signals || []).forEach((s) =>
-    signals.push({ signal_type: "chat", signal_name: s, impact: -8, description: s })
-  );
-  (aiResult?.positive_signals || []).forEach((s) =>
-    signals.push({ signal_type: "chat", signal_name: s, impact: 8, description: s })
-  );
+  (aiResult?.negative_signals || []).forEach((s) => {
+    const base = -8;
+    const impact = Math.round(base * wmap(s, wm));
+    signals.push({ signal_type: "chat", signal_name: s, impact, description: s });
+  });
+  (aiResult?.positive_signals || []).forEach((s) => {
+    const base = 8;
+    const impact = Math.round(base * wmap(s, wm));
+    signals.push({ signal_type: "chat", signal_name: s, impact, description: s });
+  });
 
   const rawAi = (aiResult?.ai_raw_response ?? null) as Record<string, unknown> | null;
   if (rawAi?.shared_phone_proactively === true) {
+    const name = "proactive_phone_share";
     signals.push({
       signal_type: "chat",
-      signal_name: "proactive_phone_share",
-      impact: 8,
+      signal_name: name,
+      impact: Math.round(8 * wmap(name, wm)),
       description: "Buyer shared phone number without being asked"
     });
   }
   if (rawAi?.shared_address_proactively === true) {
+    const name = "proactive_address_share";
     signals.push({
       signal_type: "chat",
-      signal_name: "proactive_address_share",
-      impact: 8,
+      signal_name: name,
+      impact: Math.round(8 * wmap(name, wm)),
       description: "Buyer shared delivery address proactively"
     });
   }
   if (rawAi?.excessive_bargaining === true) {
+    const name = "excessive_bargaining";
     signals.push({
       signal_type: "chat",
-      signal_name: "excessive_bargaining",
-      impact: -12,
+      signal_name: name,
+      impact: Math.round(-12 * wmap(name, wm)),
       description: "Excessive price negotiation followed by sudden confirmation — common fake order pattern"
     });
   }
   if (rawAi?.asked_about_returns === true) {
+    const name = "asked_about_returns";
     signals.push({
       signal_type: "chat",
-      signal_name: "asked_about_returns",
-      impact: -15,
+      signal_name: name,
+      impact: Math.round(-15 * wmap(name, wm)),
       description: "Buyer asked about return policy before confirming — significant risk indicator for COD"
     });
   }
@@ -117,17 +137,19 @@ export function computeFinalScore({
   const behavioralCount =
     typeof buyerScoringCount === "number" ? buyerScoringCount : messageCount;
   if (behavioralCount < 3) {
+    const name = "insufficient_buyer_attribution";
     signals.push({
       signal_type: "chat",
-      signal_name: "insufficient_buyer_attribution",
-      impact: -10,
+      signal_name: name,
+      impact: Math.round(-10 * wmap(name, wm)),
       description: `Only ${behavioralCount} high-confidence buyer message(s) for scoring — insufficient attributed buyer speech`
     });
   } else if (messageCount >= 10) {
+    const name = "rich_conversation_data";
     signals.push({
       signal_type: "chat",
-      signal_name: "rich_conversation_data",
-      impact: 5,
+      signal_name: name,
+      impact: Math.round(5 * wmap(name, wm)),
       description: "Extended conversation provides good signal quality"
     });
   }
@@ -167,7 +189,32 @@ export function computeFinalScore({
     }))
   );
 
-  const finalScore = Math.round(Math.max(0, Math.min(100, weightedScore)));
+  let finalScore = Math.round(Math.max(0, Math.min(100, weightedScore)));
+
+  const nFake = networkIgFakeCount ?? 0;
+  if (nFake >= 2) {
+    const cap = 12;
+    if (finalScore > cap) {
+      finalScore = cap;
+      signals.push({
+        signal_type: "history",
+        signal_name: "network_fraud_cap",
+        impact: 0,
+        description: "Cross-seller network: multiple fake outcomes for this handle — score capped (advisory only)"
+      });
+    }
+  } else if (nFake === 1) {
+    const cap = 40;
+    if (finalScore > cap) {
+      finalScore = cap;
+      signals.push({
+        signal_type: "history",
+        signal_name: "network_fraud_signal",
+        impact: 0,
+        description: "Cross-seller network: prior fake outcome for this handle — score reduced (advisory only)"
+      });
+    }
+  }
 
   return {
     finalScore,
