@@ -9,6 +9,7 @@ create table if not exists public.profiles (
   id uuid references auth.users(id) on delete cascade primary key,
   email text not null,
   full_name text,
+  username text,
   plan text default 'free',
   analyses_used int default 0,
   analyses_limit int default 20,
@@ -175,13 +176,17 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, email, full_name)
+  insert into public.profiles (id, email, full_name, username)
   values (
     new.id,
     new.email,
-    coalesce(new.raw_user_meta_data ->> 'full_name', new.raw_user_meta_data ->> 'name')
+    coalesce(new.raw_user_meta_data ->> 'full_name', new.raw_user_meta_data ->> 'name'),
+    nullif(new.raw_user_meta_data ->> 'username', '')
   );
   return new;
+exception
+  when unique_violation then
+    return new;
 end;
 $$;
 
