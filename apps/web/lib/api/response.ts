@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
+import { logServerError } from "@/lib/api/log-server-error";
 import { getSupabasePublicKey, getSupabaseUrl } from "@/lib/supabase/config";
 
 export const corsHeaders = {
@@ -39,6 +40,7 @@ export function withAuth(handler: AuthHandler) {
       if (!user) return apiError("Unauthorized", 401);
       return handler({ req, user: { id: user.id, email: user.email } });
     } catch (error) {
+      logServerError("withAuth", error);
       const message = error instanceof Error ? error.message : "Unexpected API error";
       return apiError(message, 500);
     }

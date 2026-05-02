@@ -250,11 +250,27 @@ async function submitForAnalysis({ messages, username, phone, address }) {
       throw new Error(`Analysis failed (${res.status})`);
     }
     if (!res.ok) {
-      console.error("ReturnSense: analyze error", res.status, result);
+      console.error(
+        "ReturnSense: analyze HTTP error",
+        res.status,
+        typeof result === "object" ? JSON.stringify(result, null, 2) : result
+      );
       throw new Error(result?.error || `Analysis failed (${res.status})`);
     }
     displayResult(result);
   } catch (error) {
+    const chain = [];
+    let e = error;
+    for (let i = 0; i < 10 && e != null; i++) {
+      const step =
+        e instanceof Error || (typeof e === "object" && "message" in e)
+          ? { name: e.name, message: e.message, stack: e.stack }
+          : { message: String(e) };
+      chain.push(step);
+      e = typeof e === "object" && e !== null && "cause" in e ? e.cause : null;
+    }
+    console.error("ReturnSense: analyze error chain\n", JSON.stringify(chain, null, 2));
+    console.error("ReturnSense: analyze exception (raw Error object — expand in DevTools)", error);
     const panel = document.querySelector("#rs-panel .rs-panel-inner");
     if (panel) {
       panel.innerHTML = `<p class="rs-popup-help" style="color:#b91c1c;">${error.message || "Request failed. Please try again."}</p>`;

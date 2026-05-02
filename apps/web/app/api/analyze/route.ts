@@ -1,4 +1,5 @@
 import { analyzeWithGemini } from "@/lib/ai/gemini";
+import { logServerError } from "@/lib/api/log-server-error";
 import { apiError, apiSuccess, corsHeaders, withAuth } from "@/lib/api/response";
 import { getHistoricalData, saveBuyer, saveSignals } from "@/lib/db/buyers";
 import { checkQuota, incrementUsage } from "@/lib/db/profiles";
@@ -103,6 +104,7 @@ export const POST = withAuth(async ({ req, user }) => {
       }
     );
   } catch (err) {
+    logServerError("POST /api/analyze", err);
     const message = err instanceof Error ? err.message : "Analysis failed";
     return apiError(message, 500);
   }
