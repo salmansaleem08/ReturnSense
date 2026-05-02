@@ -712,6 +712,10 @@ let rsMainMarginElement = null;
 let lastUsername = "unknown_buyer";
 /** @type {Array<{ role: string; text: string }>} */
 let lastMessages = [];
+/** @type {string | null} */
+let lastSubmittedPhone = null;
+/** @type {string | null} */
+let lastSubmittedAddress = null;
 
 function escapeHtml(str) {
   return String(str ?? "")
@@ -849,24 +853,30 @@ function getTokenFromBackground() {
 }
 
 function showLoading() {
-  const panel = document.querySelector("#rs-panel .rs-panel-inner");
-  if (!panel) return;
-  panel.innerHTML = `
-      <h3 class="rs-panel-title">Analyzing Buyer</h3>
-      <div style="display:flex;justify-content:center;padding:20px 0;"><div class="rs-spinner"></div></div>
-      <p class="rs-popup-help" style="text-align:center;">Running AI analysis, phone checks, and address validation...</p>
-    `;
+  const body = document.getElementById("rs-panel-body");
+  if (!body) return;
+  body.innerHTML = `
+    <div class="rs-spinner-wrap">
+      <div class="rs-spinner"></div>
+      <div style="color:#374151;font-size:14px;font-weight:700;">Analyzing buyer...</div>
+      <div style="color:#9CA3AF;font-size:12px;text-align:center;line-height:1.4;">Checking phone · Verifying address · Running AI analysis</div>
+    </div>`;
 }
 
 async function submitForAnalysis({ messages, username, phone, address }) {
+  lastUsername = username || "unknown_buyer";
+  lastMessages = Array.isArray(messages) ? messages.slice() : [];
+  lastSubmittedPhone = phone ?? null;
+  lastSubmittedAddress = address ?? null;
+
   showLoading();
   const authData = await getTokenFromBackground();
   const token = authData?.token;
 
   if (!token) {
-    const panel = document.querySelector("#rs-panel .rs-panel-inner");
-    if (panel) {
-      panel.innerHTML = `<p class="rs-popup-help" style="color:#b91c1c;">Please set up your token in the extension popup first.</p>`;
+    const body = document.getElementById("rs-panel-body");
+    if (body) {
+      body.innerHTML = `<p style="color:#b91c1c;font-size:13px;padding:12px;">Please set up your token in the extension popup first.</p>`;
     }
     return;
   }
@@ -916,66 +926,247 @@ async function submitForAnalysis({ messages, username, phone, address }) {
     }
     console.error("ReturnSense: analyze error chain\n", JSON.stringify(chain, null, 2));
     console.error("ReturnSense: analyze exception (raw Error object — expand in DevTools)", error);
-    const panel = document.querySelector("#rs-panel .rs-panel-inner");
-    if (panel) {
-      panel.innerHTML = `<p class="rs-popup-help" style="color:#b91c1c;">${error.message || "Request failed. Please try again."}</p>`;
+    const errBody = document.getElementById("rs-panel-body");
+    if (errBody) {
+      const msg = error instanceof Error ? error.message : "Request failed. Please try again.";
+      errBody.innerHTML = `<p style="color:#b91c1c;font-size:13px;padding:12px;">${escapeHtml(msg)}</p>`;
     }
   }
 }
 
+/**
+ * @param {Record<string, unknown>} result
+ */
 function displayResult(result) {
-  const panel = document.getElementById("rs-panel");
-  if (!panel) return;
-  const score = result.trust_score;
-  const color = score >= 75 ? "#16a34a" : score >= 55 ? "#ca8a04" : score >= 35 ? "#ea580c" : "#dc2626";
-  const phone = result.phone_analysis;
-  const address = result.address_analysis;
-  const quality = address && typeof address.address_quality_score === "number" ? address.address_quality_score : 0;
+  const body = document.getElementById("rs-panel-body");
+  if (!body) return;
 
-  const phoneHtml =
-    phone == null
-      ? `<p class="rs-popup-help">Phone not verified — add a number in the panel and set <code>ABSTRACT_API_KEY</code> on the server for carrier checks.</p>`
-      : `<div class="rs-kv"><span>Status</span><b>${phone.phone_valid ? "Valid" : "Invalid"}</b></div>
-         <div class="rs-kv"><span>Carrier</span><b>${phone.phone_carrier || "—"}</b></div>
-         <div class="rs-kv"><span>Type</span><b>${phone.phone_type || "—"}</b></div>
-         <div class="rs-kv"><span>Country</span><b>${phone.phone_country || "—"}</b></div>
-         ${phone.phone_is_voip ? '<span class="rs-signal-negative">VoIP warning</span>' : ""}`;
+  const scoreRaw = result?.trust_score;
+  const score = typeof scoreRaw === "number" && !Number.isNaN(scoreRaw) ? scoreRaw : 0;
+  const riskColor =
+    score >= 75 ? "#16a34a" : score >= 55 ? "#ca8a04" : score >= 35 ? "#ea580c" : "#dc2626";
 
-  const addressHtml =
-    address == null
-      ? `<p class="rs-popup-help">Address not geocoded — add a full address in the panel and <code>GOOGLE_MAPS_API_KEY</code> on the server.</p>`
-      : `<p class="rs-addr-line">${address.address_formatted || "Not found on map"}</p>
-         <div class="rs-kv"><span>Quality</span><b>${quality}/100</b></div>
-         <div style="height:8px;background:var(--ig-border);border-radius:999px;overflow:hidden;">
-           <div style="height:100%;width:${quality}%;background:${quality > 60 ? "#16a34a" : quality > 35 ? "#ea580c" : "#ed4956"};"></div>
-         </div>`;
+  const riskKey = String(result?.risk_level ?? "critical").toLowerCase();
+  const riskLabel =
+    riskKey === "low"
+      ? "LOW RISK"
+      : riskKey === "medium"
+        ? "MEDIUM RISK"
+        : riskKey === "high"
+          ? "HIGH RISK"
+          : "CRITICAL RISK";
 
-  panel.innerHTML = `
-      <button class="rs-close" id="rs-close-panel">×</button>
-      <div class="rs-panel-inner">
-        <div class="rs-score-circle" style="border-color:${color};color:${color};">${score}</div>
-        <div class="rs-risk-badge" style="background:${color};">${result.risk_level.toUpperCase()} RISK</div>
+  const analystNotes =
+    (typeof result?.analyst_notes === "string" && result.analyst_notes) ||
+    "No analyst notes provided.";
 
-        <div class="rs-section">
-          <strong>Phone analysis</strong>
-          ${phoneHtml}
+  const circumference = 2 * Math.PI * 46;
+  const dashOffset = circumference * (1 - Math.min(100, Math.max(0, score)) / 100);
+
+  const phone = result?.phone_analysis;
+  const address = result?.address_analysis;
+
+  let phoneBlock = "";
+  if (phone == null) {
+    phoneBlock = `<p style="color:#6B7280;font-size:13px;">No phone data returned from server.</p>`;
+  } else if (phone.configured === false) {
+    phoneBlock = `<p style="color:#6B7280;font-size:13px;">Phone validation is not configured. Add your ABSTRACT_API_KEY to the server environment to enable carrier and VoIP detection.</p>`;
+  } else if (phone.phone_valid === null) {
+    phoneBlock = `<p style="color:#6B7280;font-size:13px;">Number provided but validation failed.</p>`;
+  } else {
+    const numDisp = escapeHtml(
+      String(phone.phone_international_format ?? phone.phone_local_format ?? lastSubmittedPhone ?? "")
+    );
+    const valid = Boolean(phone.phone_valid);
+    const statusHtml = valid
+      ? `<span style="color:#16a34a;font-weight:600;">✅ Valid Active Number</span>`
+      : `<span style="color:#dc2626;font-weight:600;">❌ Invalid or Inactive</span>`;
+    const typeStr = escapeHtml(String(phone.phone_type ?? "Unknown"));
+    const typeExtra = phone.phone_is_voip ? ` <span style="color:#dc2626;">⚠️ VoIP</span>` : "";
+    const carrier = escapeHtml(String(phone.phone_carrier ?? "Unknown"));
+    const country = escapeHtml(String(phone.phone_country ?? "Unknown"));
+    phoneBlock = `
+      <div class="rs-row"><span class="rs-row-label">Number</span><span class="rs-row-value">${numDisp || "—"}</span></div>
+      <div class="rs-row"><span class="rs-row-label">Status</span><span class="rs-row-value">${statusHtml}</span></div>
+      <div class="rs-row"><span class="rs-row-label">Type</span><span class="rs-row-value">${typeStr}${typeExtra}</span></div>
+      <div class="rs-row"><span class="rs-row-label">Carrier</span><span class="rs-row-value">${carrier}</span></div>
+      <div class="rs-row"><span class="rs-row-label">Country</span><span class="rs-row-value">${country}</span></div>
+      ${phone.phone_is_voip ? `<div class="rs-voip-warning">⚠️ HIGH RISK — VoIP numbers are commonly used for fake orders. Consider requesting an alternate contact.</div>` : ""}`;
+  }
+
+  let addressBlock = "";
+  if (address == null) {
+    addressBlock = `<p style="color:#6B7280;font-size:13px;">No address data returned from server.</p>`;
+  } else if (address.configured === false) {
+    addressBlock = `<p style="color:#6B7280;font-size:13px;">Address geocoding is not configured. Add your GOOGLE_MAPS_API_KEY to the server environment to enable map verification.</p>`;
+  } else if (!address.address_found) {
+    addressBlock = `<p style="color:#6B7280;font-size:13px;">Address could not be located on map. Try resubmitting with a more specific address including street number and city name.</p>`;
+  } else {
+    const q = typeof address.address_quality_score === "number" ? address.address_quality_score : 0;
+    const barColor = q > 70 ? "#16a34a" : q > 40 ? "#ca8a04" : "#dc2626";
+    const prec = String(address.address_precision ?? "");
+    let precLabel = "Approximate street";
+    if (prec === "ROOFTOP") precLabel = "Exact location ✅";
+    else if (prec === "APPROXIMATE") precLabel = "⚠️ Area only — imprecise";
+    const qualWord =
+      q > 85 ? "Excellent" : q > 60 ? "Good" : q > 30 ? "Fair — may cause delivery issues" : "Poor — too vague";
+    const lat = address.address_lat;
+    const lng = address.address_lng;
+    const mapIframe =
+      lat != null && lng != null
+        ? `<iframe class="rs-map-iframe" loading="lazy" title="Map" src="https://www.google.com/maps?q=${encodeURIComponent(String(lat))},${encodeURIComponent(String(lng))}&z=15&output=embed"></iframe>`
+        : "";
+    addressBlock = `
+      <p style="font-size:13px;color:#111827;line-height:1.45;margin:0 0 8px;">${escapeHtml(String(address.address_formatted ?? ""))}</p>
+      <div class="rs-row"><span class="rs-row-label">City</span><span class="rs-row-value">${escapeHtml(String(address.address_city ?? ""))}</span></div>
+      <div class="rs-row"><span class="rs-row-label">Province</span><span class="rs-row-value">${escapeHtml(String(address.address_province ?? ""))}</span></div>
+      <div class="rs-row"><span class="rs-row-label">Precision</span><span class="rs-row-value">${escapeHtml(precLabel)}</span></div>
+      <div style="font-size:12px;color:#374151;margin-top:6px;">Quality: ${qualWord} (${q}/100)</div>
+      <div class="rs-progress-bar-wrap"><div class="rs-progress-bar-fill" style="width:${q}%;background:${barColor};"></div></div>
+      ${mapIframe}`;
+  }
+
+  const pos = Array.isArray(result?.positive_signals) ? result.positive_signals : [];
+  const neg = Array.isArray(result?.negative_signals) ? result.negative_signals : [];
+  const posHtml =
+    pos.length > 0
+      ? pos.map((s) => `<span class="rs-badge-green">${escapeHtml(String(s))}</span>`).join("")
+      : `<span style="color:#9CA3AF;font-size:12px;">None detected</span>`;
+  const negHtml =
+    neg.length > 0
+      ? neg.map((s) => `<span class="rs-badge-red">${escapeHtml(String(s))}</span>`).join("")
+      : `<span style="color:#9CA3AF;font-size:12px;">None detected</span>`;
+
+  const ser = escapeHtml(String(result?.buyer_seriousness ?? "—"));
+  const committed = result?.commitment_confirmed === true;
+  const commQ = escapeHtml(String(result?.communication_quality ?? "—"));
+  const reasons = Array.isArray(result?.ai_reasons) ? result.ai_reasons : [];
+  const reasonsHtml = reasons
+    .map((r) => `<div style="border-bottom:1px solid #F3F4F6;padding:6px 0;color:#374151;font-size:13px;">• ${escapeHtml(String(r))}</div>`)
+    .join("");
+
+  const recRaw = String(result?.recommendation ?? "caution").toLowerCase();
+  let recColor = "#ca8a04";
+  let recText = "USE CAUTION";
+  if (recRaw === "proceed") {
+    recColor = "#16a34a";
+    recText = "PROCEED WITH ORDER";
+  } else if (recRaw === "hold") {
+    recColor = "#ea580c";
+    recText = "HOLD ORDER";
+  } else if (recRaw === "reject") {
+    recColor = "#dc2626";
+    recText = "REJECT ORDER";
+  }
+  const recBg = `${recColor}26`;
+
+  const hist = Array.isArray(result?.historical_data) ? result.historical_data : [];
+  let histHtml = "";
+  if (!hist.length) {
+    histHtml = `<p style="font-size:13px;color:#374151;margin:0;">No prior records found for this buyer in the ReturnSense network.</p>
+      <p style="color:#16a34a;font-size:13px;margin:8px 0 0;">✅ No red flags from history.</p>`;
+  } else {
+    const rows = hist
+      .map((row) => {
+        const o = String(row?.outcome ?? "");
+        let bg = "#F8FAFC";
+        if (o === "delivered") bg = "#F0FDF4";
+        else if (o === "returned") bg = "#FFFBEB";
+        else if (o === "fake") bg = "#FEF2F2";
+        const dRaw = row?.outcome_marked_at;
+        let dateStr = "—";
+        if (dRaw) {
+          try {
+            dateStr = new Date(String(dRaw)).toLocaleDateString();
+          } catch (_e) {
+            dateStr = "—";
+          }
+        }
+        return `<tr style="background:${bg};"><td>${escapeHtml(o)}</td><td>${escapeHtml(dateStr)}</td></tr>`;
+      })
+      .join("");
+    histHtml = `<table class="rs-history-table"><thead><tr><th>Outcome</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  const buyerIdDisp = escapeHtml(String(result?.buyer_id ?? "—"));
+
+  body.innerHTML = `
+    <div class="rs-card" style="border-top:3px solid ${riskColor};">
+      <div class="rs-card-body">
+        <div class="rs-score-wrap">
+          <svg class="rs-score-svg" viewBox="0 0 120 120" aria-hidden="true">
+            <circle cx="60" cy="60" r="46" fill="none" stroke="#F3F4F6" stroke-width="10" />
+            <circle cx="60" cy="60" r="46" fill="none" stroke="${riskColor}" stroke-width="10" stroke-linecap="round"
+              stroke-dasharray="${circumference}"
+              stroke-dashoffset="${dashOffset}"
+              transform="rotate(-90 60 60)" />
+            <text x="60" y="60" text-anchor="middle" dominant-baseline="central" fill="${riskColor}" font-size="26" font-weight="800">${score}</text>
+          </svg>
+          <span class="rs-risk-badge" style="background:${riskColor};">${riskLabel}</span>
+          <div class="rs-analyst-notes">${escapeHtml(analystNotes)}</div>
         </div>
-
-        <div class="rs-section">
-          <strong>Address analysis</strong>
-          ${addressHtml}
-        </div>
-
-        <div class="rs-section">
-          <strong>AI Signals</strong>
-          ${(result.ai_reasons || []).map((r) => `<div class="rs-reason">• ${r}</div>`).join("")}
-        </div>
-
-        <a href="${result.dashboard_url}" target="_blank" class="rs-link">View Full Report →</a>
       </div>
-    `;
+    </div>
 
-  document.getElementById("rs-close-panel")?.addEventListener("click", closePanel);
+    <div class="rs-card">
+      <div class="rs-card-header">📱 Phone Analysis</div>
+      <div class="rs-card-body">${phoneBlock}</div>
+    </div>
+
+    <div class="rs-card">
+      <div class="rs-card-header">📍 Address Analysis</div>
+      <div class="rs-card-body">${addressBlock}</div>
+    </div>
+
+    <div class="rs-card">
+      <div class="rs-card-header">🤖 AI Behavioral Analysis</div>
+      <div class="rs-card-body">
+        <div class="rs-signals-grid">
+          <div>
+            <div class="rs-signals-col-title" style="color:#16a34a;">✅ Positive</div>
+            <div>${posHtml}</div>
+          </div>
+          <div>
+            <div class="rs-signals-col-title" style="color:#dc2626;">⚠️ Risks</div>
+            <div>${negHtml}</div>
+          </div>
+        </div>
+        <div class="rs-stats-row">
+          <span>Seriousness: ${ser}</span><span>·</span>
+          <span>Committed: ${committed ? "Yes ✅" : "No"}</span><span>·</span>
+          <span>Communication: ${commQ}</span>
+        </div>
+        ${reasonsHtml}
+        <div class="rs-recommendation" style="background:${recBg};color:${recColor};border-color:${recColor};">${recText}</div>
+      </div>
+    </div>
+
+    <div class="rs-card">
+      <div class="rs-card-header">📋 Buyer History</div>
+      <div class="rs-card-body">${histHtml}</div>
+    </div>
+
+    <div class="rs-card">
+      <div class="rs-card-body">
+        <button type="button" class="rs-action-btn rs-btn-primary" id="rs-view-report">View Full Report →</button>
+        <button type="button" class="rs-action-btn rs-btn-secondary" id="rs-new-analysis">New Analysis</button>
+        <div style="text-align:center;color:#9CA3AF;font-size:11px;margin-top:4px;">Analysis ID: ${buyerIdDisp} | Powered by ReturnSense</div>
+      </div>
+    </div>`;
+
+  const viewBtn = document.getElementById("rs-view-report");
+  if (viewBtn) {
+    viewBtn.addEventListener("click", () => {
+      const u = result?.dashboard_url;
+      if (typeof u === "string" && u) window.open(u, "_blank", "noopener,noreferrer");
+    });
+  }
+  const newBtn = document.getElementById("rs-new-analysis");
+  if (newBtn) {
+    newBtn.addEventListener("click", () => {
+      openAnalysisPanel(lastUsername, lastMessages);
+    });
+  }
 }
 
 function removeFloatingAnalyzeButton() {
