@@ -977,16 +977,32 @@ function displayResult(result) {
     const statusHtml = valid
       ? `<span class="rs-status-valid">Valid — Active</span>`
       : `<span class="rs-status-invalid">Invalid</span>`;
-    const typeStr = escapeHtml(String(phone.phone_type ?? "Unknown"));
-    const typeExtra = phone.phone_is_voip ? ` <span class="rs-status-warning">VoIP</span>` : "";
-    const carrier = escapeHtml(String(phone.phone_carrier ?? "Unknown"));
-    const country = escapeHtml(String(phone.phone_country ?? "Unknown"));
+    const carrierTrim = typeof phone.phone_carrier === "string" ? phone.phone_carrier.trim() : "";
+    const countryTrim = typeof phone.phone_country === "string" ? phone.phone_country.trim() : "";
+    const typeTrim = typeof phone.phone_type === "string" ? phone.phone_type.trim() : "";
+    const typeParts = [];
+    if (typeTrim) typeParts.push(escapeHtml(typeTrim));
+    if (phone.phone_is_voip) typeParts.push(`<span class="rs-status-warning">VoIP</span>`);
+    const typeRow =
+      typeParts.length > 0
+        ? `<div class="rs-row"><span class="rs-row-label">Type</span><span class="rs-row-value">${typeParts.join(
+            " "
+          )}</span></div>`
+        : "";
+    const carrierRow = carrierTrim
+      ? `<div class="rs-row"><span class="rs-row-label">Carrier</span><span class="rs-row-value">${escapeHtml(
+          carrierTrim
+        )}</span></div>`
+      : "";
+    const countryRow = countryTrim
+      ? `<div class="rs-row"><span class="rs-row-label">Country</span><span class="rs-row-value">${escapeHtml(
+          countryTrim
+        )}</span></div>`
+      : "";
     phoneBlock = `
       <div class="rs-row"><span class="rs-row-label">Number</span><span class="rs-row-value">${numDisp || "—"}</span></div>
       <div class="rs-row"><span class="rs-row-label">Status</span><span class="rs-row-value">${statusHtml}</span></div>
-      <div class="rs-row"><span class="rs-row-label">Type</span><span class="rs-row-value">${typeStr}${typeExtra}</span></div>
-      <div class="rs-row"><span class="rs-row-label">Carrier</span><span class="rs-row-value">${carrier}</span></div>
-      <div class="rs-row"><span class="rs-row-label">Country</span><span class="rs-row-value">${country}</span></div>
+      ${typeRow}${carrierRow}${countryRow}
       ${phone.phone_is_voip ? `<div class="rs-voip-warning">HIGH RISK — VoIP numbers are commonly used for fake orders. Consider requesting an alternate contact.</div>` : ""}`;
   }
 
