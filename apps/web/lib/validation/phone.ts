@@ -6,9 +6,11 @@ export interface PhoneResult {
   phone_type?: string | null;
   phone_local_format?: string | null;
   phone_international_format?: string | null;
+  phone_number?: string | null;
   phone_error?: string;
   configured: boolean;
-  error?: string;
+  error?: string | null;
+  not_provided?: boolean;
 }
 
 const PHONE_FAIL: PhoneResult = {

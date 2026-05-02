@@ -1034,6 +1034,11 @@ function displayResult(result) {
     phoneBlock = `<p style="color:#6B7280;font-size:13px;">No phone data returned from server.</p>`;
   } else if (phone.configured === false) {
     phoneBlock = `<p style="color:#6B7280;font-size:13px;">Phone validation is not configured. Add your ABSTRACT_API_KEY to the server environment to enable carrier and VoIP detection.</p>`;
+  } else if (
+    phone.not_provided === true ||
+    (phone.phone_valid === null && !phone.error)
+  ) {
+    phoneBlock = `<p style="color:#9CA3AF;font-size:13px;margin:0;">No phone number was submitted with this analysis. Pre-fill the phone field before running analysis to enable validation.</p>`;
   } else if (phone.phone_valid === null) {
     phoneBlock = `<p style="color:#6B7280;font-size:13px;">Number provided but validation failed.</p>`;
   } else {

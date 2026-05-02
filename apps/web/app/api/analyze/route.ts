@@ -80,14 +80,15 @@ export async function OPTIONS() {
 export const POST = withAuth(async ({ req, user }) => {
   try {
     const body = await req.json();
-    let { messages, username, phone, address } = body as {
+    const rawBody = body as {
       messages?: Array<{ role: string; text: string }>;
       username?: string;
       phone?: string | null;
       address?: string | null;
     };
-    if (typeof phone === "string") phone = phone.trim();
-    if (typeof address === "string") address = address.trim();
+    let { messages, username } = rawBody;
+    const phoneStr = rawBody.phone == null ? "" : String(rawBody.phone).trim();
+    const addressStr = rawBody.address == null ? "" : String(rawBody.address).trim();
     username = typeof username === "string" && username.trim().length ? username.trim() : "unknown_buyer";
     messages = normalizeMessages(messages);
     if (!messages || messages.length < 2) {
@@ -99,11 +100,25 @@ export const POST = withAuth(async ({ req, user }) => {
       return apiError("Monthly limit reached. Upgrade plan.", 429);
     }
 
-    const historicalData = await getHistoricalData(phone, username);
+    const historicalData = await getHistoricalData(phoneStr || null, username);
+
+    const phoneNotProvided: PhoneResult = {
+      phone_valid: null,
+      phone_carrier: null,
+      phone_is_voip: null,
+      phone_type: null,
+      phone_country: null,
+      phone_international_format: null,
+      phone_local_format: null,
+      phone_number: null,
+      configured: true,
+      not_provided: true,
+      error: null
+    };
 
     const [phoneResult, addressResult] = await Promise.all([
-      validatePhone(phone ?? ""),
-      validateAddress(address ?? "")
+      phoneStr ? validatePhone(phoneStr) : Promise.resolve(phoneNotProvided),
+      validateAddress(addressStr || "")
     ]);
 
     const aiResult = await analyzeWithGemini(messages, username);
@@ -125,8 +140,8 @@ export const POST = withAuth(async ({ req, user }) => {
     const buyer = await saveBuyer({
       seller_id: user.id,
       instagram_username: username,
-      phone_number: phone,
-      address_raw: address,
+      phone_number: phoneStr || null,
+      address_raw: addressStr || null,
       ...phoneDbPayload,
       ...addressDbPayload,
       ...buyerRowPayloadFromAi(aiResult),
