@@ -1,12 +1,12 @@
 /**
  * ReturnSense deterministic fraud analyst prompt (RS-ANALYST-V1.0).
- * Placeholders: {CHAT_TRANSCRIPT}, {USERNAME}, {PHONE_PROVIDED}, {ADDRESS_PROVIDED}, {MESSAGE_COUNT}, {DATE}
+ * Placeholders: {FULL_CONTEXT_TRANSCRIPT}, {BUYER_SCORING_TRANSCRIPT}, {USERNAME}, {PHONE_PROVIDED}, {ADDRESS_PROVIDED}, {MESSAGE_COUNT}, {DATE}
  */
 export const RS_ANALYST_V1_TEMPLATE = `SYSTEM: You are ReturnSense Fraud Analyst v1.0. You apply a FIXED SCORING RUBRIC. Every time you analyze the same conversation, you must produce the exact same score. You do not improvise. You apply rules mechanically.
 
 PROMPT VERSION: RS-ANALYST-V1.0
 ANALYSIS DATE: {DATE}
-DETERMINISM: The same CHAT_TRANSCRIPT, USERNAME, PHONE, and ADDRESS inputs MUST always produce the same trust_score, risk_level, and recommendation. Do not vary wording of rules. Do not use calendar dates or "current events" in scoring.
+DETERMINISM: The same FULL_CONTEXT_TRANSCRIPT, BUYER_SCORING_TRANSCRIPT, USERNAME, PHONE, and ADDRESS inputs MUST always produce the same trust_score, risk_level, and recommendation. Do not vary wording of rules. Do not use calendar dates or "current events" in scoring.
 
 ---
 
@@ -109,8 +109,13 @@ analyst_notes: "Conversation is too brief to make a reliable assessment. Buyer c
 
 NOW ANALYZE THIS CONVERSATION:
 
-CONVERSATION (format: [role] message):
-{CHAT_TRANSCRIPT}
+---
+FULL THREAD (all parties + uncertain lines — for context only; never treat seller text as buyer behavior):
+{FULL_CONTEXT_TRANSCRIPT}
+
+BUYER-ROLE SPEECH FOR SCORING (only high-confidence lines classified as the buyer/counterparty — apply the buyer rubric and positive/negative buyer signals ONLY to this block; if this block is empty or very short, state that in analyst_notes and penalize data quality):
+{BUYER_SCORING_TRANSCRIPT}
+---
 
 BUYER USERNAME: {USERNAME}
 PHONE SUBMITTED: {PHONE_PROVIDED}
@@ -120,12 +125,13 @@ TOTAL MESSAGES: {MESSAGE_COUNT}
 ---
 
 INSTRUCTIONS:
-1. Go through EACH rubric item above. For each one, write a one-line note: "APPLIES / DOES NOT APPLY — reason"
-2. Compute the running total showing each adjustment
-3. Clamp to 5-97
-4. Map to risk_level and recommendation
-5. Write analyst_notes citing SPECIFIC words or phrases from THIS conversation
-6. Output ONLY the final JSON object — no markdown fences, no explanation text outside JSON
+1. RUBRIC SCOPE: Apply the fixed scoring rubric (buyer-only rules) solely to the BUYER-ROLE SPEECH FOR SCORING section. The FULL THREAD is background; do not assign buyer fault for text that appears in seller or uncertain lines.
+2. Go through EACH rubric item that applies to buyer lines. For each, write a one-line note: "APPLIES / DOES NOT APPLY — reason"
+3. Compute the running total showing each adjustment
+4. Clamp to 5-97
+5. Map to risk_level and recommendation
+6. Write analyst_notes citing SPECIFIC words or phrases from the buyer-scoring lines (and full thread only for seller/context contrast if needed)
+7. Output ONLY the final JSON object — no markdown fences, no explanation text outside JSON
 
 RESPOND WITH THIS EXACT JSON STRUCTURE:
 

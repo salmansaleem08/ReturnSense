@@ -18,6 +18,7 @@ import type { AddressResult } from "@/lib/validation/address";
 import { validateAddress } from "@/lib/validation/address";
 import type { PhoneResult } from "@/lib/validation/phone";
 import { validatePhone } from "@/lib/validation/phone";
+import { logAttributionSummary, summarizeAttribution, type AnalyzedMessage } from "@/lib/analysis/attribution";
 
 /** Only columns that exist on `public.buyers` — PostgREST rejects unknown keys. */
 function buyerPhoneDb(p: PhoneResult & { phone_valid: boolean }) {
@@ -41,16 +42,40 @@ function buyerAddressDb(a: AddressResult) {
   };
 }
 
-function formatChatForStorage(messages: Array<{ role: string; text: string }>) {
-  return messages.map((m) => `[${m.role.toUpperCase()}] ${m.text}`).join("\n").slice(0, 12000);
+/** Privacy: raw transcript is not persisted (Improvement Six). */
+function formatChatForStorage(_messages: Array<{ role: string; text: string }>) {
+  return "";
 }
 
 /** Same transcript in different DOM order → same hash → cache hit / identical analysis. */
-function canonicalMessagesForHash(messages: Array<{ role: string; text: string }>) {
+function toAnalyzedMessages(
+  messages: Array<{
+    role: string;
+    text: string;
+    attribution_confidence?: number;
+    attribution_signals?: string[];
+  }>
+): AnalyzedMessage[] {
+  return messages.map((m) => ({
+    role: m.role,
+    text: m.text,
+    attribution_confidence: m.attribution_confidence,
+    attribution_signals: m.attribution_signals
+  }));
+}
+
+function canonicalMessagesForHash(
+  messages: Array<{
+    role: string;
+    text: string;
+    attribution_confidence?: number;
+  }>
+) {
   return [...messages]
     .map((m) => ({
       role: String(m.role ?? "").toLowerCase().trim(),
-      text: String(m.text ?? "").trim()
+      text: String(m.text ?? "").trim(),
+      attribution_confidence: m.attribution_confidence
     }))
     .filter((m) => m.text.length > 0)
     .sort((a, b) => {
@@ -99,7 +124,14 @@ function addressFromBuyerRow(buyer: Record<string, unknown>): AddressResult {
 }
 
 /** Instagram fallback often sends one transcript blob; Gemini still needs a turn structure. */
-function normalizeMessages(messages: Array<{ role: string; text: string }> | null | undefined) {
+function normalizeMessages(
+  messages: Array<{
+    role: string;
+    text: string;
+    attribution_confidence?: number;
+    attribution_signals?: string[];
+  }> | null | undefined
+) {
   if (!messages?.length) return [];
   if (messages.length >= 2) return messages;
   const text = (messages[0]?.text ?? "").trim();
@@ -117,19 +149,20 @@ function normalizeMessages(messages: Array<{ role: string; text: string }> | nul
     if (segments.length >= 2) {
       return segments.map((chunk, i) => ({
         role: i % 2 === 0 ? "buyer" : "seller",
-        text: chunk
+        text: chunk,
+        attribution_confidence: 0.55
       }));
     }
     const mid = Math.floor(text.length / 2);
     return [
-      { role: messages[0]?.role || "buyer", text: text.slice(0, mid).trim() },
-      { role: "seller", text: text.slice(mid).trim() }
+      { role: messages[0]?.role || "buyer", text: text.slice(0, mid).trim(), attribution_confidence: 0.55 },
+      { role: "seller", text: text.slice(mid).trim(), attribution_confidence: 0.55 }
     ];
   }
   if (messages.length === 1 && text.length > 0) {
     return [
-      { role: messages[0]?.role || "buyer", text },
-      { role: "seller", text: "[No additional messages captured in thread]" }
+      { role: messages[0]?.role || "buyer", text, attribution_confidence: messages[0]?.attribution_confidence },
+      { role: "seller", text: "[No additional messages captured in thread]", attribution_confidence: 0.55 }
     ];
   }
   return messages;
@@ -151,7 +184,12 @@ export const POST = withAuth(async ({ req, user }) => {
 
     const body = await req.json();
     const rawBody = body as {
-      messages?: Array<{ role: string; text: string }>;
+      messages?: Array<{
+        role: string;
+        text: string;
+        attribution_confidence?: number;
+        attribution_signals?: string[];
+      }>;
       username?: string;
       phone?: string | null;
       address?: string | null;
@@ -164,6 +202,10 @@ export const POST = withAuth(async ({ req, user }) => {
     if (!messages || messages.length < 2) {
       return apiError("Not enough chat data", 400);
     }
+
+    const analyzedForLog = toAnalyzedMessages(messages);
+    logAttributionSummary("RS-ATTRIB", analyzedForLog);
+    const attribCounts = summarizeAttribution(analyzedForLog);
 
     const messageCount = messages.length;
 
@@ -289,7 +331,8 @@ export const POST = withAuth(async ({ req, user }) => {
       phoneResult,
       addressResult,
       historicalData,
-      chatMessages: messages
+      chatMessages: messages,
+      buyerScoringCount: attribCounts.buyer_for_scoring
     });
 
     const phoneDbPayload =
@@ -305,7 +348,13 @@ export const POST = withAuth(async ({ req, user }) => {
     const aiPayload = buyerRowPayloadFromAi(aiResult);
     const mergedRaw = {
       ...(aiPayload.ai_raw_response as Record<string, unknown>),
-      message_count: messageCount
+      message_count: messageCount,
+      attribution_summary: {
+        total_messages: attribCounts.total,
+        buyer_for_scoring: attribCounts.buyer_for_scoring,
+        seller_labeled: attribCounts.seller_labeled,
+        uncertain: attribCounts.uncertain
+      }
     };
 
     const buyer = await saveBuyer({

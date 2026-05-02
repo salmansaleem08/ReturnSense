@@ -1,9 +1,17 @@
 import { RS_ANALYST_V1_TEMPLATE } from "@/lib/ai/rs-analyst-v1";
+import {
+  formatBuyerScoringTranscript,
+  formatFullContextTranscript,
+  type AnalyzedMessage
+} from "@/lib/analysis/attribution";
 
 export interface ChatMessage {
   role: string;
   text: string;
   timestamp?: string | null;
+  /** 0–1 confidence in `role` (extension); omitted on legacy clients. */
+  attribution_confidence?: number;
+  attribution_signals?: string[];
 }
 
 export interface AiStructuredResult {
@@ -45,14 +53,24 @@ export function buildAnalysisPrompt(
   phoneProvided?: string | null,
   addressProvided?: string | null
 ) {
-  const chatTranscript = messages.map((m) => `${m.role}: ${m.text}`).join("\n");
+  const analyzed: AnalyzedMessage[] = messages.map((m) => ({
+    role: m.role,
+    text: m.text,
+    attribution_confidence: m.attribution_confidence,
+    attribution_signals: m.attribution_signals
+  }));
+  const fullContextTranscript = formatFullContextTranscript(analyzed);
+  const buyerScoringTranscript =
+    formatBuyerScoringTranscript(analyzed).trim() ||
+    "(none — no buyer lines met confidence threshold; use FULL THREAD only as weak context and penalize insufficient buyer attribution.)";
   const phoneLine = phoneProvided?.trim()?.length ? phoneProvided.trim() : "Not provided";
   const addressLine = addressProvided?.trim()?.length ? addressProvided.trim() : "Not provided";
   const messageCount = String(messages.length);
   /** Fixed so identical chats produce identical model output (daily date caused drift). */
   const dateStr = "N/A";
 
-  return RS_ANALYST_V1_TEMPLATE.replace("{CHAT_TRANSCRIPT}", chatTranscript)
+  return RS_ANALYST_V1_TEMPLATE.replace("{FULL_CONTEXT_TRANSCRIPT}", fullContextTranscript)
+    .replace("{BUYER_SCORING_TRANSCRIPT}", buyerScoringTranscript)
     .replace("{USERNAME}", username)
     .replace("{PHONE_PROVIDED}", phoneLine)
     .replace("{ADDRESS_PROVIDED}", addressLine)

@@ -14,6 +14,8 @@ interface ScoreInput {
   addressResult: unknown;
   historicalData: Array<{ outcome: string; outcome_marked_at?: string | null }>;
   chatMessages?: Array<{ role: string; text: string }>;
+  /** High-confidence buyer lines only — excludes uncertain/seller from behavioral sampling thresholds. */
+  buyerScoringCount?: number;
 }
 
 interface Signal {
@@ -62,7 +64,8 @@ export function computeFinalScore({
   phoneResult,
   addressResult,
   historicalData,
-  chatMessages
+  chatMessages,
+  buyerScoringCount
 }: ScoreInput) {
   const signals: Signal[] = [];
   let weightedScore = 0;
@@ -111,12 +114,14 @@ export function computeFinalScore({
   }
 
   const messageCount = chatMessages?.length ?? 0;
-  if (messageCount < 3) {
+  const behavioralCount =
+    typeof buyerScoringCount === "number" ? buyerScoringCount : messageCount;
+  if (behavioralCount < 3) {
     signals.push({
       signal_type: "chat",
-      signal_name: "insufficient_chat_data",
+      signal_name: "insufficient_buyer_attribution",
       impact: -10,
-      description: `Only ${messageCount} message(s) captured — insufficient data for reliable analysis`
+      description: `Only ${behavioralCount} high-confidence buyer message(s) for scoring — insufficient attributed buyer speech`
     });
   } else if (messageCount >= 10) {
     signals.push({

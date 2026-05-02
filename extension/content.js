@@ -25,7 +25,7 @@ let captureIdleTimer = null;
 let captureUsernameForIdle = null;
 
 let lastUsername = "unknown_buyer";
-/** @type {Array<{ role: string; text: string }>} */
+/** @type {Array<{ role: string; text: string; attribution_confidence?: number; attribution_signals?: string[] }>} */
 let lastMessages = [];
 
 function queryWithFallbacks(selectors, root = document) {
@@ -94,6 +94,7 @@ function harvestVisibleMessages() {
       if (skipPatterns.some((p) => p.test(text))) continue;
 
       let role = "unknown";
+      let layoutSource = "none";
       let ancestor = el;
       for (let i = 0; i < 8; i++) {
         ancestor = ancestor?.parentElement ?? null;
@@ -107,10 +108,12 @@ function harvestVisibleMessages() {
         const jc = style?.justifyContent ?? "";
         if (jc === "flex-end") {
           role = "seller";
+          layoutSource = "flex-end";
           break;
         }
         if (jc === "flex-start" || jc === "normal") {
           role = "buyer";
+          layoutSource = "flex-start";
           break;
         }
       }
@@ -119,16 +122,34 @@ function harvestVisibleMessages() {
         try {
           const rect = el.getBoundingClientRect?.();
           const viewMid = window.innerWidth / 2;
-          if (rect && rect.left + rect.width / 2 > viewMid + 60) role = "seller";
-          else if (rect && rect.left + rect.width / 2 < viewMid - 60) role = "buyer";
+          if (rect && rect.left + rect.width / 2 > viewMid + 60) {
+            role = "seller";
+            layoutSource = "geometry-right";
+          } else if (rect && rect.left + rect.width / 2 < viewMid - 60) {
+            role = "buyer";
+            layoutSource = "geometry-left";
+          }
         } catch (_e) {
           /* keep unknown */
         }
       }
 
+      /** @type {string[]} */
+      const attribution_signals = [];
+      let attribution_confidence = 0.41;
+      if (layoutSource === "flex-end" || layoutSource === "flex-start") {
+        attribution_confidence = 0.9;
+        attribution_signals.push(`layout:${layoutSource}`);
+      } else if (layoutSource === "geometry-right" || layoutSource === "geometry-left") {
+        attribution_confidence = 0.64;
+        attribution_signals.push(layoutSource);
+      } else {
+        attribution_signals.push("role-unknown");
+      }
+
       const alreadyExists = capturedMessages.some((m) => m && m.text === text);
       if (!alreadyExists) {
-        capturedMessages.push({ role, text });
+        capturedMessages.push({ role, text, attribution_confidence, attribution_signals });
       }
     }
 
