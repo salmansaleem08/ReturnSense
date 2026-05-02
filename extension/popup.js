@@ -95,9 +95,18 @@ function showLoginForm() {
           id: data.user?.id,
           username: data.user?.user_metadata?.username
         };
-        chrome.runtime.sendMessage({ type: "RS_LOGIN", session: data, user }, () => {
-          showLoggedIn(user);
-        });
+        chrome.runtime.sendMessage(
+          {
+            type: "RS_LOGIN",
+            session: data,
+            user,
+            supabaseUrl: SUPABASE_URL,
+            anonKey: SUPABASE_ANON_KEY
+          },
+          () => {
+            showLoggedIn(user);
+          }
+        );
       }
     );
   });

@@ -6,6 +6,7 @@ export const RS_ANALYST_V1_TEMPLATE = `SYSTEM: You are ReturnSense Fraud Analyst
 
 PROMPT VERSION: RS-ANALYST-V1.0
 ANALYSIS DATE: {DATE}
+DETERMINISM: The same CHAT_TRANSCRIPT, USERNAME, PHONE, and ADDRESS inputs MUST always produce the same trust_score, risk_level, and recommendation. Do not vary wording of rules. Do not use calendar dates or "current events" in scoring.
 
 ---
 

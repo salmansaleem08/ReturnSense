@@ -37,7 +37,7 @@ export function buyerRowPayloadFromAi(ai: AiStructuredResult) {
   };
 }
 
-export const SYSTEM_PROMPT = `ReturnSense: Output exactly one JSON object. No markdown code fences. No text before or after the JSON.`;
+export const SYSTEM_PROMPT = `ReturnSense: Output exactly one JSON object. No markdown code fences. No text before or after the JSON. Apply the user rubric mechanically — identical inputs → identical numeric scores.`;
 
 export function buildAnalysisPrompt(
   messages: ChatMessage[],
@@ -49,7 +49,8 @@ export function buildAnalysisPrompt(
   const phoneLine = phoneProvided?.trim()?.length ? phoneProvided.trim() : "Not provided";
   const addressLine = addressProvided?.trim()?.length ? addressProvided.trim() : "Not provided";
   const messageCount = String(messages.length);
-  const dateStr = new Date().toISOString().slice(0, 10);
+  /** Fixed so identical chats produce identical model output (daily date caused drift). */
+  const dateStr = "N/A";
 
   return RS_ANALYST_V1_TEMPLATE.replace("{CHAT_TRANSCRIPT}", chatTranscript)
     .replace("{USERNAME}", username)
@@ -80,7 +81,8 @@ export async function analyzeWithOpenRouter(
       ],
       temperature: 0,
       top_p: 1,
-      max_tokens: 2048
+      max_tokens: 2048,
+      seed: 13371337
     })
   });
   const data = await res.json();
@@ -106,7 +108,7 @@ export async function analyzeWithOpenRouter(
       ? (parsed.reasons as string[])
       : [];
   return {
-    ai_trust_score: Number(parsed.trust_score ?? 50),
+    ai_trust_score: Math.round(Number(parsed.trust_score ?? 50)),
     ai_risk_level: String(parsed.risk_level ?? "medium"),
     ai_hesitation_detected: Boolean(parsed.hesitation_detected),
     ai_buyer_seriousness: String(parsed.buyer_seriousness ?? "medium"),

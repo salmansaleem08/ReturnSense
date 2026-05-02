@@ -50,7 +50,7 @@ export default async function BuyerDetailPage({ params }: { params: { id: string
   const analystNotes = buyer.ai_raw_response?.analyst_notes || "No analyst notes available.";
 
   return (
-    <div className="grid gap-6 lg:grid-cols-5">
+    <div className="grid w-full max-w-[min(1600px,100%)] gap-6 lg:grid-cols-5 motion-safe:animate-[rs-fade-in_0.4s_ease-out]">
       <section className="space-y-4 lg:col-span-3 lg:pr-2">
         <TrustScoreGauge score={buyer.final_trust_score ?? 0} />
 

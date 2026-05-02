@@ -1151,7 +1151,13 @@ function displayResult(result) {
   const viewBtn = document.getElementById("rs-view-report");
   if (viewBtn) {
     viewBtn.addEventListener("click", () => {
-      const u = result?.dashboard_url;
+      const fromApi = result?.dashboard_url;
+      let u =
+        typeof fromApi === "string" && /^https?:\/\//i.test(fromApi.trim()) ? fromApi.trim() : null;
+      const bid = result?.buyer_id;
+      if (!u && bid != null && bid !== "") {
+        u = `${API_BASE}/dashboard/buyers/${encodeURIComponent(String(bid))}`;
+      }
       if (typeof u === "string" && u) window.open(u, "_blank", "noopener,noreferrer");
     });
   }

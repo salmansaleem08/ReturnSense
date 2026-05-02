@@ -164,3 +164,101 @@ html {
   outline: none;
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
 }
+
+@keyframes rs-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rs-dashboard-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border: var(--border);
+  background: linear-gradient(145deg, var(--ig-bg) 0%, var(--ig-blue-light) 42%, var(--ig-bg) 100%);
+  min-height: 132px;
+  margin-bottom: 1.5rem;
+}
+
+.rs-dashboard-hero__mesh {
+  position: absolute;
+  inset: 0;
+  opacity: 0.75;
+  background-image:
+    radial-gradient(ellipse 90% 70% at 15% 35%, rgba(0, 149, 246, 0.2), transparent 55%),
+    radial-gradient(ellipse 80% 60% at 85% 65%, rgba(29, 154, 11, 0.14), transparent 52%),
+    radial-gradient(circle at 50% 120%, rgba(38, 38, 38, 0.06), transparent 45%);
+  pointer-events: none;
+}
+
+.rs-dashboard-hero__orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(40px);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.rs-dashboard-hero__orb--a {
+  width: 120px;
+  height: 120px;
+  background: var(--ig-blue);
+  top: -40px;
+  right: 12%;
+  animation: rs-float 8s ease-in-out infinite;
+}
+
+.rs-dashboard-hero__orb--b {
+  width: 100px;
+  height: 100px;
+  background: var(--ig-green);
+  bottom: -30px;
+  left: 8%;
+  animation: rs-float 10s ease-in-out infinite reverse;
+}
+
+@keyframes rs-float {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-8px) scale(1.03);
+  }
+}
+
+.rs-dashboard-hero__content {
+  position: relative;
+  z-index: 1;
+  padding: 1.35rem 1.35rem 1.5rem;
+}
+
+.rs-stagger > * {
+  animation: rs-fade-in 0.42s ease-out both;
+}
+
+.rs-stagger > *:nth-child(1) {
+  animation-delay: 0.05s;
+}
+.rs-stagger > *:nth-child(2) {
+  animation-delay: 0.1s;
+}
+.rs-stagger > *:nth-child(3) {
+  animation-delay: 0.15s;
+}
+.rs-stagger > *:nth-child(4) {
+  animation-delay: 0.2s;
+}
+.rs-stagger > *:nth-child(5) {
+  animation-delay: 0.25s;
+}
+.rs-stagger > *:nth-child(6) {
+  animation-delay: 0.3s;
+}
+

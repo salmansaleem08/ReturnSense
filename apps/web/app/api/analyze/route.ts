@@ -3,6 +3,7 @@ import { createHash } from "crypto";
 import { analyzeWithGemini } from "@/lib/ai/gemini";
 import { buyerRowPayloadFromAi } from "@/lib/ai/openrouter";
 import { logServerError } from "@/lib/api/log-server-error";
+import { getPublicAppUrl } from "@/lib/config/public-app-url";
 import { apiError, corsHeaders, withAuth } from "@/lib/api/response";
 import {
   findBuyerByConversationHash,
@@ -42,6 +43,21 @@ function buyerAddressDb(a: AddressResult) {
 
 function formatChatForStorage(messages: Array<{ role: string; text: string }>) {
   return messages.map((m) => `[${m.role.toUpperCase()}] ${m.text}`).join("\n").slice(0, 12000);
+}
+
+/** Same transcript in different DOM order → same hash → cache hit / identical analysis. */
+function canonicalMessagesForHash(messages: Array<{ role: string; text: string }>) {
+  return [...messages]
+    .map((m) => ({
+      role: String(m.role ?? "").toLowerCase().trim(),
+      text: String(m.text ?? "").trim()
+    }))
+    .filter((m) => m.text.length > 0)
+    .sort((a, b) => {
+      const cmp = a.text.localeCompare(b.text);
+      if (cmp !== 0) return cmp;
+      return a.role.localeCompare(b.role);
+    });
 }
 
 function phoneFromBuyerRow(buyer: Record<string, unknown>): PhoneResult {
@@ -154,13 +170,16 @@ export const POST = withAuth(async ({ req, user }) => {
     const conversationHash = createHash("sha256")
       .update(
         JSON.stringify({
-          messages: messages.map((m) => ({ role: m.role, text: m.text })),
+          messages: canonicalMessagesForHash(messages),
           username,
           phone: phoneStr,
           address: addressStr
         })
       )
       .digest("hex");
+
+    const appBase = getPublicAppUrl();
+    console.log("[RS] Link base URL (dashboard / extension deep links):", appBase);
 
     const cachedBuyer = await findBuyerByConversationHash(user.id, conversationHash);
     if (cachedBuyer) {
@@ -208,7 +227,7 @@ export const POST = withAuth(async ({ req, user }) => {
           historical_data: historicalData ?? [],
           signals,
           cached: true,
-          dashboard_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/buyers/${cachedBuyer.id}`
+          dashboard_url: `${appBase}/dashboard/buyers/${cachedBuyer.id}`
         },
         { headers: corsHeaders }
       );
@@ -255,6 +274,13 @@ export const POST = withAuth(async ({ req, user }) => {
       phoneStr ? validatePhone(phoneStr) : Promise.resolve(phoneNotProvided),
       addressStr ? validateAddress(addressStr) : Promise.resolve(addressNotProvided)
     ]);
+
+    console.log("[RS-PHONE] validation summary:", {
+      configured: phoneResult.configured,
+      not_provided: phoneResult.not_provided,
+      phone_valid: phoneResult.phone_valid,
+      error: phoneResult.error ?? null
+    });
 
     const aiResult = await analyzeWithGemini(messages, username, phoneStr || null, addressStr || null);
 
@@ -328,7 +354,7 @@ export const POST = withAuth(async ({ req, user }) => {
         historical_data: historicalData ?? [],
         signals,
         cached: false,
-        dashboard_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/buyers/${buyer.id}`
+        dashboard_url: `${appBase}/dashboard/buyers/${buyer.id}`
       },
       { headers: corsHeaders }
     );

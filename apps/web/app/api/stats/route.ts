@@ -11,7 +11,7 @@ export const GET = withAuth(async ({ user }) => {
     const [{ count: totalAnalyses = 0 }, { data: scoreRows = [] }, { count: scams = 0 }, { count: highRisk = 0 }, { count: pending = 0 }, quota] =
       await Promise.all([
         supabaseAdmin.from("buyers").select("*", { count: "exact", head: true }).eq("seller_id", user.id),
-        supabaseAdmin.from("buyers").select("final_trust_score,outcome").eq("seller_id", user.id),
+        supabaseAdmin.from("buyers").select("final_trust_score,final_risk_level,outcome").eq("seller_id", user.id),
         supabaseAdmin.from("buyers").select("*", { count: "exact", head: true }).eq("seller_id", user.id).eq("outcome", "fake"),
         supabaseAdmin
           .from("buyers")
@@ -32,6 +32,38 @@ export const GET = withAuth(async ({ user }) => {
     const returned = safeRows.filter((row) => row.outcome === "returned").length;
     const returnRate = delivered + returned > 0 ? Math.round((returned / (delivered + returned)) * 100) : 0;
 
+    const since = new Date();
+    since.setDate(since.getDate() - 13);
+    since.setHours(0, 0, 0, 0);
+    const { data: dayRows } = await supabaseAdmin
+      .from("buyers")
+      .select("created_at")
+      .eq("seller_id", user.id)
+      .gte("created_at", since.toISOString());
+
+    const byDay: Record<string, number> = {};
+    for (let i = 13; i >= 0; i -= 1) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      d.setHours(0, 0, 0, 0);
+      byDay[d.toISOString().slice(0, 10)] = 0;
+    }
+    for (const row of dayRows ?? []) {
+      const day = new Date(String(row.created_at)).toISOString().slice(0, 10);
+      if (day in byDay) byDay[day] += 1;
+    }
+    const analyses_by_day = Object.entries(byDay).map(([date, count]) => ({
+      day: date.slice(5),
+      fullDate: date,
+      count
+    }));
+
+    const riskBuckets = { low: 0, medium: 0, high: 0, critical: 0 };
+    for (const row of safeRows) {
+      const k = ((row.final_risk_level as string) || "critical").toLowerCase();
+      if (k in riskBuckets) riskBuckets[k as keyof typeof riskBuckets] += 1;
+    }
+
     return apiSuccess(
       {
         total_analyses: totalAnalyses ?? 0,
@@ -41,7 +73,11 @@ export const GET = withAuth(async ({ user }) => {
         high_risk_count: highRisk ?? 0,
         pending_count: pending ?? 0,
         analyses_used: quota.used,
-        analyses_limit: quota.limit
+        analyses_limit: quota.limit,
+        delivered_count: delivered,
+        returned_count: returned,
+        risk_distribution: riskBuckets,
+        analyses_by_day
       }
     );
   } catch (error) {

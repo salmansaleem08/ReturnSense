@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
@@ -19,7 +20,19 @@ import {
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
-const COLORS = ["#16a34a", "#f59e0b", "#dc2626", "#64748b"];
+const RISK_COLORS: Record<string, string> = {
+  low: "#1D9A0B",
+  medium: "#D4A017",
+  high: "#E8490F",
+  critical: "#ED4956"
+};
+
+const OUTCOME_COLORS: Record<string, string> = {
+  delivered: "#1D9A0B",
+  returned: "#D4A017",
+  fake: "#ED4956",
+  pending: "#8E8E8E"
+};
 
 export default function AnalyticsPage() {
   const [buyers, setBuyers] = useState<any[]>([]);
@@ -101,43 +114,78 @@ export default function AnalyticsPage() {
     }));
   }, [buyers]);
 
-  if (loading) return <div className="rounded-xl border border-slate-200 bg-white p-6">Loading analytics...</div>;
+  const summary = useMemo(() => {
+    const total = buyers.length;
+    const scores = buyers.map((b) => b.final_trust_score).filter((n: unknown) => typeof n === "number");
+    const avgTrust = scores.length ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length) : 0;
+    const critical = buyers.filter((b) => b.final_risk_level === "critical").length;
+    const pendingOutcomes = buyers.filter((b) => !b.outcome || b.outcome === "pending").length;
+    const scams = buyers.filter((b) => b.outcome === "fake").length;
+    return { total, avgTrust, critical, pendingOutcomes, scams };
+  }, [buyers]);
+
+  if (loading) {
+    return (
+      <div
+        className="rounded-[var(--radius-md)] border border-[#DBDBDB] bg-white p-8 text-center text-sm"
+        style={{ color: "var(--ig-text-secondary)" }}
+      >
+        Loading analytics…
+      </div>
+    );
+  }
 
   return (
-    <div className="grid gap-5">
+    <div className="grid w-full gap-6 motion-safe:animate-[rs-fade-in_0.45s_ease-out]">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <Kpi title="Total analyses" value={summary.total} accent="#0095F6" />
+        <Kpi title="Avg trust score" value={summary.avgTrust} accent="#1D9A0B" />
+        <Kpi title="Critical risk" value={summary.critical} accent="#ED4956" />
+        <Kpi title="Pending outcomes" value={summary.pendingOutcomes} accent="#8E8E8E" />
+        <Kpi title="Scams (fake)" value={summary.scams} accent="#E8490F" />
+      </section>
+
       <div className="grid gap-5 xl:grid-cols-2">
-        <ChartCard title="Trust Score Distribution">
+        <ChartCard title="Trust score distribution">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={trustDistribution}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="bucket" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="value" fill="#2563eb" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#EFEFEF" />
+              <XAxis dataKey="bucket" tick={{ fill: "#8E8E8E", fontSize: 11 }} />
+              <YAxis allowDecimals={false} tick={{ fill: "#8E8E8E", fontSize: 11 }} />
+              <Tooltip
+                contentStyle={{ border: "1px solid #DBDBDB", borderRadius: 8, fontSize: 12 }}
+              />
+              <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                {trustDistribution.map((_, i) => (
+                  <Cell key={i} fill={["#ED4956", "#E8490F", "#D4A017", "#1D9A0B"][i] ?? "#0095F6"} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Analyses Over Time (30 days)">
+        <ChartCard title="Analyses over time (30 days)">
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={analysesOverTime}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="day" />
-              <YAxis />
-              <Tooltip />
-              <Line type="monotone" dataKey="count" stroke="#2563eb" strokeWidth={2} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#EFEFEF" />
+              <XAxis dataKey="day" tick={{ fill: "#8E8E8E", fontSize: 11 }} />
+              <YAxis allowDecimals={false} tick={{ fill: "#8E8E8E", fontSize: 11 }} />
+              <Tooltip
+                contentStyle={{ border: "1px solid #DBDBDB", borderRadius: 8, fontSize: 12 }}
+              />
+              <Line type="monotone" dataKey="count" stroke="#0095F6" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </ChartCard>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-2">
-        <ChartCard title="Outcome Breakdown">
+        <ChartCard title="Outcome breakdown">
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
               <Pie data={outcomeBreakdown} dataKey="value" nameKey="name" innerRadius={70} outerRadius={100}>
-                {outcomeBreakdown.map((entry, index) => (
-                  <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
+                {outcomeBreakdown.map((entry) => (
+                  <Cell key={entry.name} fill={OUTCOME_COLORS[entry.name] ?? "#737373"} />
                 ))}
               </Pie>
               <Legend />
@@ -146,27 +194,31 @@ export default function AnalyticsPage() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Risk Level Distribution">
+        <ChartCard title="Risk level">
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={riskDistribution} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis type="number" />
-              <YAxis dataKey="level" type="category" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#EFEFEF" />
+              <XAxis type="number" allowDecimals={false} tick={{ fill: "#8E8E8E", fontSize: 11 }} />
+              <YAxis dataKey="level" type="category" width={72} tick={{ fill: "#8E8E8E", fontSize: 11 }} />
               <Tooltip />
-              <Bar dataKey="count" fill="#0f172a" />
+              <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                {riskDistribution.map((r) => (
+                  <Cell key={r.level} fill={RISK_COLORS[r.level] ?? "#737373"} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
       </div>
 
-      <ChartCard title="Average Trust Score by Outcome">
+      <ChartCard title="Average trust score by outcome">
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={trustByOutcome}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="outcome" />
-            <YAxis />
+            <CartesianGrid strokeDasharray="3 3" stroke="#EFEFEF" />
+            <XAxis dataKey="outcome" tick={{ fill: "#8E8E8E", fontSize: 11 }} />
+            <YAxis domain={[0, 100]} tick={{ fill: "#8E8E8E", fontSize: 11 }} />
             <Tooltip />
-            <Bar dataKey="avg" fill="#16a34a" />
+            <Bar dataKey="avg" fill="#0095F6" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
@@ -174,10 +226,31 @@ export default function AnalyticsPage() {
   );
 }
 
-function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
+function Kpi({ title, value, accent }: { title: string; value: number; accent: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <h3 className="mb-3 text-sm font-semibold text-slate-600">{title}</h3>
+    <div
+      className="rounded-[var(--radius-md)] border border-[#DBDBDB] bg-white p-4 transition-shadow hover:shadow-sm"
+      style={{ borderTopWidth: 3, borderTopColor: accent }}
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--ig-text-muted)" }}>
+        {title}
+      </p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums" style={{ color: "var(--ig-text-primary)" }}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function ChartCard({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div
+      className="rounded-[var(--radius-md)] border border-[#DBDBDB] bg-white p-4"
+      style={{ boxShadow: "none" }}
+    >
+      <h3 className="mb-3 text-sm font-semibold" style={{ color: "var(--ig-text-primary)" }}>
+        {title}
+      </h3>
       {children}
     </div>
   );

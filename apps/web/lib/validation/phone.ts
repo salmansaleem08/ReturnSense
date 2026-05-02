@@ -39,6 +39,9 @@ export async function validatePhone(phoneInput?: string | null): Promise<PhoneVa
   const cleanPhone = phoneInput?.replace(/[\s\-.]/g, "") ?? "";
 
   if (!apiKey) {
+    console.warn(
+      "[RS-PHONE] ABSTRACT_API_KEY not set — set ABSTRACT_API_KEY (or ABSTRACT_PHONE_API_KEY) on the server. Phone carrier/valid checks disabled."
+    );
     return {
       phone_valid: null,
       phone_carrier: null,

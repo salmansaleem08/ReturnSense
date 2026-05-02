@@ -73,7 +73,7 @@ function mapParsedToAiResult(parsed: Record<string, unknown>): AiStructuredResul
       ? (parsed.reasons as string[])
       : [];
   return {
-    ai_trust_score: Number(parsed.trust_score ?? 50),
+    ai_trust_score: Math.round(Number(parsed.trust_score ?? 50)),
     ai_risk_level: String(parsed.risk_level ?? "medium"),
     ai_hesitation_detected: Boolean(parsed.hesitation_detected),
     ai_buyer_seriousness: String(parsed.buyer_seriousness ?? "medium"),

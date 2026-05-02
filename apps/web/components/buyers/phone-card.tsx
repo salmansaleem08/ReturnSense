@@ -19,8 +19,8 @@ export function PhoneCard({ data }: { data: PhoneData }) {
     statusLabel = "Not provided";
     statusClass = "text-muted-foreground";
   } else if (!validated) {
-    statusLabel = "Not verified (add ABSTRACT_API_KEY on server)";
-    statusClass = "text-primary";
+    statusLabel = "Not verified — add ABSTRACT_API_KEY on the server; check Vercel logs for [RS-PHONE].";
+    statusClass = "text-amber-600 dark:text-amber-500";
   } else if (data.phone_valid === true) {
     statusLabel = "Valid";
     statusClass = "text-emerald-600 dark:text-emerald-400";

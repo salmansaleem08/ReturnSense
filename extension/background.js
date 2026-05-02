@@ -11,6 +11,44 @@ function normalizeSupabaseUrl(url) {
     .replace(/\/+$/, "");
 }
 
+function storageGet(keys) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(keys, resolve);
+  });
+}
+
+function storageSet(obj) {
+  return new Promise((resolve) => {
+    chrome.storage.local.set(obj, resolve);
+  });
+}
+
+/** Refresh access token using refresh_token — keeps extension logged in past JWT expiry. */
+async function refreshSupabaseSession(supabaseUrl, anonKey, refreshToken) {
+  const base = normalizeSupabaseUrl(supabaseUrl);
+  const url = `${base}/auth/v1/token?grant_type=refresh_token`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: anonKey
+    },
+    body: JSON.stringify({ refresh_token: refreshToken })
+  });
+  const text = await res.text();
+  let data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    return null;
+  }
+  if (!res.ok || !data.access_token) {
+    console.warn("[RS] Supabase refresh failed:", res.status, data.error_description || data.msg || data.error);
+    return null;
+  }
+  return data;
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const type = message?.type;
 
@@ -45,9 +83,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     (async () => {
       try {
-        // Password grant: only `apikey` + Content-Type (Supabase docs).
-        // Do NOT add Authorization here: publishable keys (sb_publishable_*) are not JWTs;
-        // Bearer + apikey mismatch breaks the API gateway and can surface as "Failed to fetch".
         const res = await fetch(authUrl, {
           method: "POST",
           headers: {
@@ -103,18 +138,55 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (type === "GET_TOKEN" || type === "RS_GET_SESSION") {
-    chrome.storage.local.get(["rs_session", "rs_user", "rs_auth_token", "rs_seller_email"], (data) => {
-      const session =
-        data.rs_session ||
-        (data.rs_auth_token ? { access_token: data.rs_auth_token } : null);
-      const token = session?.access_token ?? data.rs_auth_token ?? null;
+    (async () => {
+      const data = await storageGet([
+        "rs_session",
+        "rs_user",
+        "rs_auth_token",
+        "rs_seller_email",
+        "rs_supabase_url",
+        "rs_supabase_anon_key",
+        "rs_expires_at"
+      ]);
+
+      let session =
+        data.rs_session || (data.rs_auth_token ? { access_token: data.rs_auth_token } : null);
+      let token = session?.access_token ?? data.rs_auth_token ?? null;
+      const refreshToken = session?.refresh_token;
+      const supabaseUrl = data.rs_supabase_url;
+      const anonKey = data.rs_supabase_anon_key;
+      const exp = data.rs_expires_at;
+
+      const needsRefresh =
+        refreshToken &&
+        supabaseUrl &&
+        anonKey &&
+        exp &&
+        Date.now() > exp - 120000;
+
+      if (needsRefresh) {
+        const refreshed = await refreshSupabaseSession(supabaseUrl, anonKey, refreshToken);
+        if (refreshed?.access_token) {
+          session = refreshed;
+          token = refreshed.access_token;
+          const ttlSec = typeof refreshed.expires_in === "number" ? refreshed.expires_in : 3600;
+          const nextExp = Date.now() + ttlSec * 1000 - 120000;
+          await storageSet({
+            rs_session: refreshed,
+            rs_auth_token: refreshed.access_token,
+            rs_expires_at: nextExp
+          });
+          console.log("[RS] Supabase session refreshed; next refresh before", new Date(nextExp).toISOString());
+        }
+      }
+
       sendResponse({
         session,
         user: data.rs_user,
         token,
         email: data.rs_user?.email ?? data.rs_seller_email ?? null
       });
-    });
+    })();
     return true;
   }
 
@@ -122,12 +194,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const session = message.session;
     const user = message.user;
     const token = session?.access_token ?? null;
+    const supabaseUrl = message.supabaseUrl ? normalizeSupabaseUrl(message.supabaseUrl) : null;
+    const anonKey = message.anonKey || null;
+    const ttlSec = typeof session?.expires_in === "number" ? session.expires_in : 3600;
+    const rsExpiresAt = Date.now() + ttlSec * 1000 - 120000;
+
     chrome.storage.local.set(
       {
         rs_session: session,
         rs_user: user,
         rs_auth_token: token ?? null,
-        rs_seller_email: user?.email ?? null
+        rs_seller_email: user?.email ?? null,
+        ...(supabaseUrl ? { rs_supabase_url: supabaseUrl } : {}),
+        ...(anonKey ? { rs_supabase_anon_key: anonKey } : {}),
+        rs_expires_at: rsExpiresAt
       },
       () => sendResponse({ success: true })
     );
@@ -135,8 +215,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (type === "RS_LOGOUT") {
-    chrome.storage.local.remove(["rs_session", "rs_user", "rs_auth_token", "rs_seller_email"], () =>
-      sendResponse({ success: true })
+    chrome.storage.local.remove(
+      [
+        "rs_session",
+        "rs_user",
+        "rs_auth_token",
+        "rs_seller_email",
+        "rs_supabase_url",
+        "rs_supabase_anon_key",
+        "rs_expires_at"
+      ],
+      () => sendResponse({ success: true })
     );
     return true;
   }
