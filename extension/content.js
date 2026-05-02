@@ -241,9 +241,17 @@ async function submitForAnalysis({ messages, username, phone, address }) {
       })
     });
 
-    const result = await res.json();
+    const rawText = await res.text();
+    let result = {};
+    try {
+      result = rawText ? JSON.parse(rawText) : {};
+    } catch {
+      console.error("ReturnSense: analyze response was not JSON", res.status, rawText?.slice?.(0, 400));
+      throw new Error(`Analysis failed (${res.status})`);
+    }
     if (!res.ok) {
-      throw new Error(result?.error || "Analysis failed");
+      console.error("ReturnSense: analyze error", res.status, result);
+      throw new Error(result?.error || `Analysis failed (${res.status})`);
     }
     displayResult(result);
   } catch (error) {

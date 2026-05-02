@@ -25,14 +25,28 @@ export function getGeminiModel() {
 
 export { SYSTEM_PROMPT, buildAnalysisPrompt };
 
+/**
+ * IMPORTANT: call candidates/parts FIRST. `response.text()` throws
+ * "Cannot coerce the result to a single JSON object" on some Gemini responses
+ * even when JSON MIME mode is off — parts still contain the model output.
+ */
 function getGeminiResponseText(result: GenerateContentResult): string {
+  const parts = result.response.candidates?.[0]?.content?.parts;
+  if (parts?.length) {
+    const joined = parts
+      .map((p) => {
+        if (p && typeof p === "object" && "text" in p && typeof (p as { text?: unknown }).text === "string") {
+          return (p as { text: string }).text;
+        }
+        return "";
+      })
+      .join("");
+    if (joined.trim()) return joined;
+  }
   try {
     return result.response.text();
   } catch {
-    const candidates = result.response.candidates;
-    const parts = candidates?.[0]?.content?.parts;
-    if (!parts?.length) return "";
-    return parts.map((p) => ("text" in p && p.text ? p.text : "")).join("");
+    return "";
   }
 }
 
@@ -65,22 +79,41 @@ function mapParsedToAiResult(parsed: Record<string, unknown>): AiStructuredResul
   };
 }
 
+function isGeminiCoerceError(err: unknown) {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.includes("Cannot coerce the result to a single JSON object");
+}
+
 export async function analyzeWithGemini(messages: ChatMessage[], username: string): Promise<AiStructuredResult> {
   const model = getGeminiModel();
   const prompt = buildAnalysisPrompt(messages, username);
 
   try {
-    const result = await model.generateContent({
-      systemInstruction: SYSTEM_PROMPT,
-      contents: [{ role: "user", parts: [{ text: prompt }] }]
-    });
+    let result: GenerateContentResult;
+    try {
+      result = await model.generateContent({
+        systemInstruction: SYSTEM_PROMPT,
+        contents: [{ role: "user", parts: [{ text: prompt }] }]
+      });
+    } catch (genErr) {
+      if (isGeminiCoerceError(genErr)) {
+        console.warn("Gemini generateContent coerce error — using OpenRouter fallback");
+        return await analyzeWithOpenRouter(messages, username);
+      }
+      throw genErr;
+    }
 
     const rawText = getGeminiResponseText(result);
     if (!rawText?.trim()) {
-      throw new Error("Empty Gemini response");
+      return await analyzeWithOpenRouter(messages, username);
     }
 
-    const parsed = parseAnalysisJson(rawText);
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = parseAnalysisJson(rawText);
+    } catch {
+      return await analyzeWithOpenRouter(messages, username);
+    }
     return mapParsedToAiResult(parsed);
   } catch (err) {
     console.error("Gemini error:", err);
