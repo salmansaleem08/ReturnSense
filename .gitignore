@@ -44,3 +44,4 @@ extension/popup-config.js
 
 # Internal docs (must never be pushed)
 ReturnSense_Blueprint.docx
+ANALYSIS_PIPELINE.local.txt

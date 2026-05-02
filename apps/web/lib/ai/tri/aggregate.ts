@@ -14,6 +14,8 @@ type CommitmentOut = {
   explicit_order_confirmation?: boolean;
   confirmation_appears_genuine?: boolean;
   confirmation_appears_hesitant_or_perfunctory?: boolean;
+  buyer_withdrew_cancelled_or_refused_order?: boolean;
+  buyer_cannot_receive_delivery_stated?: boolean;
   notes?: string;
 };
 
@@ -24,6 +26,7 @@ type FraudOut = {
   excessive_bargaining_then_confirm?: boolean;
   proactive_phone_in_chat?: boolean;
   proactive_address_in_chat?: boolean;
+  cannot_fulfill_delivery_buyer_side?: boolean;
   notes?: string;
 };
 
@@ -64,24 +67,32 @@ export function aggregateTriSignals(
   }
   if (b?.notes) reasons.push(`A: ${b.notes}`);
 
-  if (c?.explicit_order_confirmation && c?.confirmation_appears_genuine) {
+  const withdrew = c?.buyer_withdrew_cancelled_or_refused_order === true;
+  const noReceive = c?.buyer_cannot_receive_delivery_stated === true;
+
+  if (withdrew) {
+    score -= 40;
+    negative.push("Buyer withdrew, cancelled, or refused the order in the thread (Model B)");
+    reasons.push("order_withdrawn (B)");
+  }
+  if (noReceive) {
+    score -= 36;
+    negative.push("Buyer stated they cannot receive delivery (away, no one home, long absence, etc.) (Model B)");
+    reasons.push("cannot_receive (B)");
+  }
+
+  const hardStop = withdrew || noReceive;
+
+  if (!hardStop && c?.explicit_order_confirmation && c?.confirmation_appears_genuine) {
     score += 12;
     positive.push("Explicit genuine-seeming confirmation (Model B)");
   }
-  if (c?.confirmation_appears_hesitant_or_perfunctory) {
+  if (c?.confirmation_appears_hesitant_or_perfunctory && !hardStop) {
     score -= 12;
     negative.push("Hesitant or perfunctory confirmation (Model B)");
   }
   if (c?.notes) reasons.push(`B: ${c.notes}`);
 
-  if (f?.proactive_phone_in_chat) {
-    score += 8;
-    positive.push("Proactive phone share in chat (Model C)");
-  }
-  if (f?.proactive_address_in_chat) {
-    score += 8;
-    positive.push("Proactive address share in chat (Model C)");
-  }
   if (f?.returns_before_order) {
     score -= 22;
     negative.push("Return policy asked before order (Model C — COD risk)");
@@ -98,7 +109,24 @@ export function aggregateTriSignals(
     score -= 16;
     negative.push("Confirm without contact details in conversation (Model C)");
   }
+  const fraudCannot = f?.cannot_fulfill_delivery_buyer_side === true;
+  if (fraudCannot) {
+    score -= 28;
+    negative.push("Buyer-side delivery fulfillment blocked (Model C)");
+    reasons.push("cannot_fulfill (C)");
+  }
   if (f?.notes) reasons.push(`C: ${f.notes}`);
+
+  const anyHardStop = hardStop || fraudCannot;
+
+  if (!anyHardStop && f?.proactive_phone_in_chat) {
+    score += 8;
+    positive.push("Proactive phone share in chat (Model C)");
+  }
+  if (!anyHardStop && f?.proactive_address_in_chat) {
+    score += 8;
+    positive.push("Proactive address share in chat (Model C)");
+  }
 
   if (!modelMeta.behavior_ok) {
     score -= 2;
@@ -113,7 +141,10 @@ export function aggregateTriSignals(
     reasons.push("fraud model unavailable — slight penalty");
   }
 
-  const trust_score = Math.round(Math.max(5, Math.min(97, score)));
+  let trust_score = Math.round(Math.max(5, Math.min(97, score)));
+  if (anyHardStop) {
+    trust_score = Math.min(trust_score, 44);
+  }
 
   const engagement_to_quality = (): string => {
     if (eq === "high") return "good";
@@ -143,7 +174,12 @@ export function aggregateTriSignals(
     risk_level,
     positive_signals: positive,
     negative_signals: negative,
-    commitment_confirmed: Boolean(c?.explicit_order_confirmation && c?.confirmation_appears_genuine),
+    buyer_withdrew_cancelled_or_refused_order: withdrew,
+    buyer_cannot_receive_delivery_stated: noReceive,
+    cannot_fulfill_delivery_buyer_side: fraudCannot,
+    commitment_confirmed: Boolean(
+      !anyHardStop && c?.explicit_order_confirmation && c?.confirmation_appears_genuine
+    ),
     hesitation_detected: Boolean(b?.hesitation_markers || c?.confirmation_appears_hesitant_or_perfunctory),
     asked_about_returns: Boolean(f?.returns_before_order),
     shared_phone_proactively: Boolean(f?.proactive_phone_in_chat),

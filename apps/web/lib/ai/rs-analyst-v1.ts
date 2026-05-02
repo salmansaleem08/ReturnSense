@@ -25,6 +25,8 @@ APPLY POSITIVE ADJUSTMENTS (add points):
 +5  if conversation has 10 or more messages (rich data, well-engaged buyer)
 
 APPLY NEGATIVE ADJUSTMENTS (subtract points):
+-40 if buyer later cancels, withdraws, refuses the order, or says they "can't do anything" / sorry after seeming to agree (later messages override early "ok")
+-35 if buyer states they cannot receive COD: not home, away for weeks/months, nobody at home to receive, parcel will be returned automatically, or no receiver available
 -25 if buyer asked about return or refund policy before confirming the order
 -20 if buyer asked to pay partial COD ("thoda baad" / "installments" / "baad mein")
 -20 if buyer was completely unresponsive to direct questions about address or phone

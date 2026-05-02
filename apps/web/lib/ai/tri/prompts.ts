@@ -53,7 +53,7 @@ Output exactly one JSON object, no markdown:
 
 /** Model B — commitment / authenticity of confirmation. */
 export function promptCommitment(ctx: ReturnType<typeof buildTriSharedContext>) {
-  return `You are Model B (commitment authenticity). Judge whether any ORDER CONFIRMATION from the buyer is genuine vs hesitant/vague. Use buyer-scoring lines first.
+  return `You are Model B (commitment & order state). Read the FULL THREAD chronologically. Early "OK/confirm" is VOID if the buyer later cancels, refuses, or says delivery is impossible.
 
 FULL THREAD:
 ${ctx.full}
@@ -61,11 +61,21 @@ ${ctx.full}
 BUYER-SCORING LINES:
 ${ctx.buyerScoring || "(none)"}
 
+Critical: Set the withdrawal / cannot-receive flags if the buyer (in any language: English, Urdu, Roman Urdu) expresses ANY of:
+- They cancel, back out, "can't do it", "sorry", refuse the order after seeming to agree
+- They will NOT be home / away for weeks or months / nobody available to receive COD
+- Parcel will be returned / no one to receive / "automatically returned" because they cannot take delivery
+- They tell the seller the order should not ship or they cannot complete the purchase
+
+If ANY of the above is clearly buyer-stated, set buyer_withdrew_cancelled_or_refused_order OR buyer_cannot_receive_delivery_stated (or both). In that case set confirmation_appears_genuine to false even if there was an earlier "ok".
+
 Output exactly one JSON object, no markdown:
 {
   "explicit_order_confirmation": <boolean>,
   "confirmation_appears_genuine": <boolean>,
   "confirmation_appears_hesitant_or_perfunctory": <boolean>,
+  "buyer_withdrew_cancelled_or_refused_order": <boolean>,
+  "buyer_cannot_receive_delivery_stated": <boolean>,
   "notes": "<one short sentence>"
 }`;
 }
@@ -81,6 +91,7 @@ Patterns to detect (booleans):
 - excessive_bargaining_then_confirm: multiple price haggles then sudden okay
 - proactive_phone_in_chat: buyer volunteers phone without being asked
 - proactive_address_in_chat: buyer volunteers detailed delivery address without being asked
+- cannot_fulfill_delivery_buyer_side: buyer states they cannot receive (travel, empty home, months away, no receiver) or situation makes COD delivery unworkable
 
 FULL THREAD:
 ${ctx.full}
@@ -99,6 +110,7 @@ Output exactly one JSON object, no markdown:
   "excessive_bargaining_then_confirm": <boolean>,
   "proactive_phone_in_chat": <boolean>,
   "proactive_address_in_chat": <boolean>,
+  "cannot_fulfill_delivery_buyer_side": <boolean>,
   "notes": "<one short sentence>"
 }`;
 }
