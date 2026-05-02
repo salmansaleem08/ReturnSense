@@ -43,7 +43,59 @@ function getAbstractPhoneApiBase(): string {
   return "https://phoneintelligence.abstractapi.com/v1";
 }
 
-/** Phone Intelligence may nest fields under `phone`; merge for shared mapping logic. */
+/** Phone Intelligence response shape (distinct from legacy Phone Validation flat JSON). */
+function isPhoneIntelligencePayload(data: Record<string, unknown>): boolean {
+  return (
+    data.phone_validation != null ||
+    data.phone_carrier != null ||
+    data.phone_format != null ||
+    data.phone_location != null
+  );
+}
+
+/** Map https://docs.abstractapi.com/api/phone-intelligence response → our fields. */
+function mapPhoneIntelligencePayload(data: Record<string, unknown>): {
+  phone_valid: boolean | null;
+  phone_carrier: string | null;
+  phone_is_voip: boolean | null;
+  phone_type: string | null;
+  phone_country: string | null;
+  phone_international_format: string | null;
+  phone_local_format: string | null;
+} {
+  const pv = data.phone_validation as Record<string, unknown> | undefined;
+  const pc = data.phone_carrier as Record<string, unknown> | undefined;
+  const pl = data.phone_location as Record<string, unknown> | undefined;
+  const pf = data.phone_format as Record<string, unknown> | undefined;
+
+  const phone_valid = typeof pv?.is_valid === "boolean" ? pv.is_valid : null;
+
+  let phone_is_voip: boolean | null = typeof pv?.is_voip === "boolean" ? pv.is_voip : null;
+
+  const lineFromCarrier = typeof pc?.line_type === "string" ? pc.line_type : null;
+  const lt = (lineFromCarrier || "").toLowerCase();
+  if (lt.includes("voip")) {
+    phone_is_voip = true;
+  }
+
+  const phone_carrier = typeof pc?.name === "string" ? pc.name : null;
+  const phone_country = typeof pl?.country_name === "string" ? pl.country_name : null;
+  const phone_international_format =
+    typeof pf?.international === "string" ? pf.international : null;
+  const phone_local_format = typeof pf?.national === "string" ? pf.national : null;
+
+  return {
+    phone_valid,
+    phone_carrier,
+    phone_is_voip,
+    phone_type: lineFromCarrier,
+    phone_country,
+    phone_international_format,
+    phone_local_format
+  };
+}
+
+/** Legacy Phone Validation: optional nested `phone` object with flat fields. */
 function abstractPayloadRoot(data: Record<string, unknown>): Record<string, unknown> {
   const nested = data.phone;
   if (nested && typeof nested === "object" && !Array.isArray(nested)) {
@@ -145,6 +197,18 @@ export async function validatePhone(phoneInput?: string | null): Promise<PhoneVa
         configured: true,
         not_provided: false,
         error: String(data.error)
+      };
+    }
+
+    if (isPhoneIntelligencePayload(data)) {
+      const mapped = mapPhoneIntelligencePayload(data);
+      console.log("[RS-PHONE] Parsed Phone Intelligence payload (carrier present:", Boolean(mapped.phone_carrier), ")");
+      return {
+        ...mapped,
+        phone_number: cleanPhone,
+        configured: true,
+        not_provided: false,
+        error: null
       };
     }
 
