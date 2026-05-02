@@ -5,8 +5,32 @@ import { apiError, apiSuccess, corsHeaders, withAuth } from "@/lib/api/response"
 import { getHistoricalData, saveBuyer, saveSignals } from "@/lib/db/buyers";
 import { checkQuota, incrementUsage } from "@/lib/db/profiles";
 import { computeFinalScore } from "@/lib/risk/score-engine";
+import type { AddressResult } from "@/lib/validation/address";
 import { validateAddress } from "@/lib/validation/address";
+import type { PhoneResult } from "@/lib/validation/phone";
 import { validatePhone } from "@/lib/validation/phone";
+
+/** Only columns that exist on `public.buyers` — PostgREST rejects unknown keys. */
+function buyerPhoneDb(p: PhoneResult) {
+  return {
+    phone_valid: p.phone_valid,
+    phone_carrier: p.phone_carrier ?? null,
+    phone_is_voip: p.phone_is_voip ?? null,
+    phone_country: p.phone_country ?? null
+  };
+}
+
+function buyerAddressDb(a: AddressResult) {
+  return {
+    address_formatted: a.address_formatted,
+    address_lat: a.address_lat,
+    address_lng: a.address_lng,
+    address_city: a.address_city,
+    address_province: a.address_province ?? null,
+    address_country: a.address_country,
+    address_quality_score: a.address_quality_score
+  };
+}
 
 function formatChatForStorage(messages: Array<{ role: string; text: string }>) {
   return messages.map((m) => `[${m.role.toUpperCase()}] ${m.text}`).join("\n").slice(0, 12000);
@@ -51,6 +75,8 @@ export const POST = withAuth(async ({ req, user }) => {
   try {
     const body = await req.json();
     let { messages, username, phone, address } = body;
+    if (typeof phone === "string") phone = phone.trim();
+    if (typeof address === "string") address = address.trim();
     username = typeof username === "string" && username.trim().length ? username.trim() : "unknown_buyer";
     messages = normalizeMessages(messages);
     if (!messages || messages.length < 2) {
@@ -81,8 +107,8 @@ export const POST = withAuth(async ({ req, user }) => {
       instagram_username: username,
       phone_number: phone,
       address_raw: address,
-      ...(phoneResult ?? {}),
-      ...(addressResult ?? {}),
+      ...(phoneResult ? buyerPhoneDb(phoneResult) : {}),
+      ...(addressResult ? buyerAddressDb(addressResult) : {}),
       ...buyerRowPayloadFromAi(aiResult),
       final_trust_score: finalScore,
       final_risk_level: riskLevel,

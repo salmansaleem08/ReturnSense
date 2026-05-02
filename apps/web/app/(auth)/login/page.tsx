@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
@@ -14,8 +14,12 @@ export default function LoginPage() {
   const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [pendingGoogle, setPendingGoogle] = useState(false);
-  const [pendingOtp, setPendingOtp] = useState(false);
+  const [pendingPassword, setPendingPassword] = useState(false);
+  const [pendingRegister, setPendingRegister] = useState(false);
+  const [pendingMagic, setPendingMagic] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,13 +45,63 @@ export default function LoginPage() {
     }
   }
 
-  async function handleOtp() {
-    setPendingOtp(true);
+  async function handleSignInPassword(e: FormEvent) {
+    e.preventDefault();
+    setPendingPassword(true);
+    setMessage(null);
+    setError(null);
+    const { error: signError } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password
+    });
+    if (signError) {
+      setError(signError.message);
+    } else {
+      router.replace("/dashboard");
+    }
+    setPendingPassword(false);
+  }
+
+  async function handleRegister(e: FormEvent) {
+    e.preventDefault();
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    setPendingRegister(true);
+    setMessage(null);
+    setError(null);
+    const origin = window.location.origin;
+    const { error: signUpError } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: {
+        emailRedirectTo: `${origin}/auth/callback?next=/dashboard`
+      }
+    });
+    if (signUpError) {
+      setError(signUpError.message);
+    } else {
+      setMessage(
+        "Check your email to confirm your account. After confirmation, sign in with email and password here."
+      );
+      setPassword("");
+      setConfirmPassword("");
+    }
+    setPendingRegister(false);
+  }
+
+  async function handleMagicLink() {
+    setPendingMagic(true);
     setMessage(null);
     setError(null);
     const origin = window.location.origin;
     const { error: otpError } = await supabase.auth.signInWithOtp({
-      email,
+      email: email.trim(),
       options: {
         emailRedirectTo: `${origin}/auth/callback?next=/dashboard`
       }
@@ -55,9 +109,9 @@ export default function LoginPage() {
     if (otpError) {
       setError(otpError.message);
     } else {
-      setMessage("Check your email for the one-time sign-in link.");
+      setMessage("Check your email for the sign-in link.");
     }
-    setPendingOtp(false);
+    setPendingMagic(false);
   }
 
   return (
@@ -73,39 +127,137 @@ export default function LoginPage() {
           </CardDescription>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <Button
-          onClick={handleGoogle}
-          className="h-8 w-full rounded-[var(--radius-sm)] font-semibold"
-          disabled={pendingGoogle}
-        >
-          {pendingGoogle ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Sign in with Google
-        </Button>
+      <CardContent className="space-y-5">
+        <div className="space-y-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 w-full rounded-[var(--radius-sm)] border-border font-semibold"
+            onClick={handleGoogle}
+            disabled={pendingGoogle}
+          >
+            {pendingGoogle ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Continue with Google
+          </Button>
+          <p className="text-center text-[11px] leading-snug text-muted-foreground">
+            If you see <span className="font-medium text-foreground">invalid_client</span> or{" "}
+            <span className="font-medium text-foreground">OAuth client was not found</span>, add Web application
+            OAuth credentials in Google Cloud Console, then paste the Client ID and Secret in Supabase →
+            Authentication → Providers → Google. Authorized redirect URI must include{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-[10px]">…/auth/v1/callback</code> on your Supabase
+            project URL.
+          </p>
+        </div>
 
-        <Tabs defaultValue="email" className="w-full">
-          <TabsList className="grid h-9 w-full grid-cols-1 rounded-[var(--radius-sm)] bg-muted p-1">
-            <TabsTrigger value="email" className="rounded-[var(--radius-xs)] font-semibold">
-              Email
+        <Tabs defaultValue="signin" className="w-full">
+          <TabsList className="grid h-10 w-full grid-cols-3 rounded-[var(--radius-sm)] bg-muted p-1">
+            <TabsTrigger value="signin" className="rounded-[var(--radius-xs)] text-xs font-semibold sm:text-sm">
+              Sign in
+            </TabsTrigger>
+            <TabsTrigger value="signup" className="rounded-[var(--radius-xs)] text-xs font-semibold sm:text-sm">
+              Sign up
+            </TabsTrigger>
+            <TabsTrigger value="magic" className="rounded-[var(--radius-xs)] text-xs font-semibold sm:text-sm">
+              Email link
             </TabsTrigger>
           </TabsList>
-          <TabsContent value="email" className="space-y-3 pt-3">
+
+          <TabsContent value="signin" className="space-y-3 pt-4">
+            <form onSubmit={handleSignInPassword} className="space-y-3">
+              <Input
+                type="email"
+                autoComplete="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-10"
+                required
+              />
+              <Input
+                type="password"
+                autoComplete="current-password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="h-10"
+                required
+              />
+              <Button
+                type="submit"
+                className="h-9 w-full rounded-[var(--radius-sm)] font-semibold"
+                disabled={pendingPassword || !email || !password}
+              >
+                {pendingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Sign in
+              </Button>
+            </form>
+          </TabsContent>
+
+          <TabsContent value="signup" className="space-y-3 pt-4">
+            <form onSubmit={handleRegister} className="space-y-3">
+              <Input
+                type="email"
+                autoComplete="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-10"
+                required
+              />
+              <Input
+                type="password"
+                autoComplete="new-password"
+                placeholder="Password (min 8 characters)"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="h-10"
+                required
+              />
+              <Input
+                type="password"
+                autoComplete="new-password"
+                placeholder="Confirm password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="h-10"
+                required
+              />
+              <Button
+                type="submit"
+                className="h-9 w-full rounded-[var(--radius-sm)] font-semibold"
+                disabled={pendingRegister || !email || !password}
+              >
+                {pendingRegister ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Create account
+              </Button>
+              <p className="text-center text-[11px] text-muted-foreground">
+                First time only: we&apos;ll send a confirmation email. Then use{" "}
+                <span className="font-medium text-foreground">Sign in</span> with the same email and password.
+              </p>
+            </form>
+          </TabsContent>
+
+          <TabsContent value="magic" className="space-y-3 pt-4">
             <Input
               type="email"
-              placeholder="you@company.com"
+              placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="h-10"
             />
             <Button
-              onClick={handleOtp}
-              disabled={pendingOtp || !email}
+              type="button"
               variant="secondary"
-              className="h-8 w-full rounded-[var(--radius-sm)] border border-border font-semibold"
+              className="h-9 w-full rounded-[var(--radius-sm)] border border-border font-semibold"
+              onClick={handleMagicLink}
+              disabled={pendingMagic || !email.trim()}
             >
-              {pendingOtp ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Send OTP Link
+              {pendingMagic ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Send sign-in link
             </Button>
+            <p className="text-center text-[11px] text-muted-foreground">
+              Passwordless login — link opens in your browser and returns you to the dashboard.
+            </p>
           </TabsContent>
         </Tabs>
 

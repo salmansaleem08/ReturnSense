@@ -314,3 +314,25 @@ body {
   color: var(--ig-text-muted);
   line-height: 1.5;
 }
+
+.rs-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--ig-text);
+}
+
+.rs-kv span {
+  color: var(--ig-text-muted);
+}
+
+.rs-kv b {
+  font-weight: 600;
+}
+
+.rs-addr-line {
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0 0 8px;
+}

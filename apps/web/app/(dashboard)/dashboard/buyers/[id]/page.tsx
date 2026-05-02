@@ -12,10 +12,10 @@ import { getSupabasePublicKey, getSupabaseUrl } from "@/lib/supabase/config";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 function riskBadgeClass(risk: string | null) {
-  if (risk === "low") return "bg-emerald-100 text-emerald-700";
-  if (risk === "medium") return "bg-yellow-100 text-yellow-700";
-  if (risk === "high") return "bg-orange-100 text-orange-700";
-  return "bg-red-100 text-red-700";
+  if (risk === "low") return "border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400";
+  if (risk === "medium") return "border border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-400";
+  if (risk === "high") return "border border-orange-500/30 bg-orange-500/10 text-orange-800 dark:text-orange-400";
+  return "border border-destructive/30 bg-destructive/10 text-destructive";
 }
 
 export default async function BuyerDetailPage({ params }: { params: { id: string } }) {
@@ -51,17 +51,19 @@ export default async function BuyerDetailPage({ params }: { params: { id: string
 
   return (
     <div className="grid gap-6 lg:grid-cols-5">
-      <section className="space-y-4 lg:col-span-3">
+      <section className="space-y-4 lg:col-span-3 lg:pr-2">
         <TrustScoreGauge score={buyer.final_trust_score ?? 0} />
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <Badge className={`${riskBadgeClass(buyer.final_risk_level)} capitalize`}>{buyer.final_risk_level ?? "critical"}</Badge>
-          <h3 className="mt-4 text-sm font-semibold text-slate-500">AI Analyst Notes</h3>
-          <p className="mt-2 italic text-slate-700">{analystNotes}</p>
+        <div className="rounded-[var(--radius-md)] border border-border bg-card p-5 shadow-none">
+          <Badge className={`${riskBadgeClass(buyer.final_risk_level)} px-3 py-1 text-xs font-semibold capitalize`}>
+            {buyer.final_risk_level ?? "critical"}
+          </Badge>
+          <h3 className="mt-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">AI notes</h3>
+          <p className="mt-2 text-sm leading-relaxed text-foreground">{analystNotes}</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <h3 className="mb-3 text-sm font-semibold text-slate-500">Positive Signals</h3>
+        <div className="rounded-[var(--radius-md)] border border-border bg-card p-5">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Positive signals</h3>
           <div className="flex flex-wrap gap-2">
             {positiveSignals.length
               ? positiveSignals.map((signal: { id: string; signal_name: string }) => (
@@ -69,12 +71,12 @@ export default async function BuyerDetailPage({ params }: { params: { id: string
                     {signal.signal_name}
                   </span>
                 ))
-              : <p className="text-sm text-slate-500">No positive signals recorded.</p>}
+              : <p className="text-sm text-muted-foreground">No positive signals recorded.</p>}
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <h3 className="mb-3 text-sm font-semibold text-slate-500">Negative Signals</h3>
+        <div className="rounded-[var(--radius-md)] border border-border bg-card p-5">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Negative signals</h3>
           <div className="flex flex-wrap gap-2">
             {negativeSignals.length
               ? negativeSignals.map((signal: { id: string; signal_name: string }) => (
@@ -82,16 +84,16 @@ export default async function BuyerDetailPage({ params }: { params: { id: string
                     {signal.signal_name}
                   </span>
                 ))
-              : <p className="text-sm text-slate-500">No negative signals recorded.</p>}
+              : <p className="text-sm text-muted-foreground">No negative signals recorded.</p>}
           </div>
         </div>
 
-        <details className="rounded-2xl border border-slate-200 bg-white p-4">
-          <summary className="cursor-pointer text-sm font-semibold text-slate-700">All Risk Signals</summary>
+        <details className="rounded-[var(--radius-md)] border border-border bg-card p-5">
+          <summary className="cursor-pointer text-sm font-semibold text-foreground">All risk signals</summary>
           <div className="mt-3 overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="text-left text-slate-500">
+                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   <th className="pb-2">Type</th>
                   <th className="pb-2">Signal</th>
                   <th className="pb-2">Impact</th>
@@ -100,7 +102,7 @@ export default async function BuyerDetailPage({ params }: { params: { id: string
               </thead>
               <tbody>
                 {(buyer.risk_signals || []).map((signal: { id: string; signal_type: string; signal_name: string; impact: number; description: string }) => (
-                  <tr key={signal.id} className="border-t border-slate-100">
+                  <tr key={signal.id} className="border-t border-border">
                     <td className="py-2 capitalize">{signal.signal_type}</td>
                     <td className="py-2">{signal.signal_name}</td>
                     <td className={`py-2 font-medium ${signal.impact > 0 ? "text-emerald-600" : "text-red-600"}`}>{signal.impact}</td>
@@ -112,38 +114,40 @@ export default async function BuyerDetailPage({ params }: { params: { id: string
           </div>
         </details>
 
-        <details className="rounded-2xl border border-slate-200 bg-white p-4">
-          <summary className="cursor-pointer text-sm font-semibold text-slate-700">Chat Transcript</summary>
-          <pre className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{buyer.chat_snapshot || "No chat snapshot available."}</pre>
+        <details className="rounded-[var(--radius-md)] border border-border bg-card p-5">
+          <summary className="cursor-pointer text-sm font-semibold text-foreground">Chat transcript</summary>
+          <pre className="mt-3 max-h-[420px] overflow-auto whitespace-pre-wrap rounded-[var(--radius-sm)] bg-muted/50 p-4 text-sm leading-relaxed text-foreground">
+            {buyer.chat_snapshot || "No chat snapshot available."}
+          </pre>
         </details>
       </section>
 
       <aside className="space-y-4 lg:col-span-2">
         <ShareLinkButton />
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <h3 className="mb-2 text-sm font-semibold text-slate-500">Buyer Info</h3>
-          <p className="font-medium">@{buyer.instagram_username}</p>
-          <p className="text-sm text-slate-500">Analyzed: {new Date(buyer.created_at).toLocaleString()}</p>
+        <div className="rounded-[var(--radius-md)] border border-border bg-card p-5">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Buyer</h3>
+          <p className="text-lg font-semibold text-foreground">@{buyer.instagram_username}</p>
+          <p className="mt-1 text-sm text-muted-foreground">Analyzed {new Date(buyer.created_at).toLocaleString()}</p>
         </div>
 
         <PhoneCard data={buyer} />
         <AddressCard data={buyer} />
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <h3 className="mb-2 text-sm font-semibold text-slate-500">Historical Record</h3>
+        <div className="rounded-[var(--radius-md)] border border-border bg-card p-5">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">History</h3>
           {history?.length ? (
-            <p className="text-sm">Found {history.length} outcome record(s) from previous analyses.</p>
+            <p className="text-sm text-foreground">Found {history.length} outcome record(s) from previous analyses.</p>
           ) : (
-            <p className="text-sm text-slate-500">First time buyer — no history</p>
+            <p className="text-sm text-muted-foreground">First-time buyer — no prior outcomes.</p>
           )}
         </div>
 
         <OutcomeMarker buyerId={buyer.id} currentOutcome={buyer.outcome} outcomeMarkedAt={buyer.outcome_marked_at} />
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <h3 className="mb-2 text-sm font-semibold text-slate-500">AI Reasons</h3>
-          <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">
+        <div className="rounded-[var(--radius-md)] border border-border bg-card p-5">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">AI reasons</h3>
+          <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-foreground">
             {reasons.map((reason: string, index: number) => <li key={index}>{reason}</li>)}
           </ul>
         </div>

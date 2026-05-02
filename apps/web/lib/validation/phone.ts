@@ -10,26 +10,50 @@ export interface PhoneResult {
 }
 
 export async function validatePhone(phoneNumber?: string | null): Promise<PhoneResult | null> {
-  if (!phoneNumber) return null;
-  const cleaned = phoneNumber.replace(/[^0-9+]/g, "");
+  const trimmed = phoneNumber?.trim();
+  if (!trimmed) return null;
 
-  const res = await fetch(
-    `https://phonevalidation.abstractapi.com/v1/?api_key=${process.env.ABSTRACT_API_KEY}&phone=${cleaned}`
-  );
-  const data = await res.json();
-
-  if (!data || data.error) {
-    return { phone_valid: false, phone_error: "Could not validate" };
+  const apiKey = process.env.ABSTRACT_API_KEY?.trim();
+  if (!apiKey) {
+    return null;
   }
 
+  const cleaned = trimmed.replace(/[^0-9+]/g, "");
+  if (cleaned.replace(/\D/g, "").length < 7) {
+    return null;
+  }
+
+  let data: Record<string, unknown>;
+  try {
+    const res = await fetch(
+      `https://phonevalidation.abstractapi.com/v1/?api_key=${apiKey}&phone=${encodeURIComponent(cleaned)}`
+    );
+    data = (await res.json()) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+
+  if (!data || data.error) {
+    return null;
+  }
+
+  const row = data as {
+    valid?: boolean;
+    carrier?: string | null;
+    type?: string | null;
+    country?: { name?: string | null };
+    local_format?: string | null;
+    international_format?: string | null;
+  };
+
   return {
-    phone_valid: data.valid,
-    phone_carrier: data.carrier,
-    phone_is_voip: data.type === "VoIP",
-    phone_country: data.country?.name,
-    phone_type: data.type,
-    phone_local_format: data.local_format,
-    phone_international_format: data.international_format
+    phone_valid: Boolean(row.valid),
+    phone_carrier: row.carrier ?? null,
+    phone_is_voip: row.type === "VoIP",
+    phone_country: row.country?.name ?? null,
+    phone_type: row.type ?? null,
+    phone_local_format: row.local_format ?? null,
+    phone_international_format: row.international_format ?? null
   };
 }
 

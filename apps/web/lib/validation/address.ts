@@ -14,18 +14,32 @@ export interface AddressResult {
 
 interface GeocodeResult {
   types: string[];
-  geometry: { location_type: string };
+  geometry: { location_type: string; location: { lat: number; lng: number } };
+  formatted_address: string;
+  address_components: Array<{ types: string[]; long_name: string; short_name: string }>;
 }
 
 export async function validateAddress(rawAddress?: string | null): Promise<AddressResult | null> {
-  if (!rawAddress) return null;
-  const encoded = encodeURIComponent(rawAddress);
-  const res = await fetch(
-    `https://maps.googleapis.com/maps/api/geocode/json?address=${encoded}&key=${process.env.GOOGLE_MAPS_API_KEY}`
-  );
-  const data = await res.json();
+  const trimmed = rawAddress?.trim();
+  if (!trimmed) return null;
 
-  if (data.status !== "OK" || !data.results.length) {
+  const mapsKey = process.env.GOOGLE_MAPS_API_KEY?.trim();
+  if (!mapsKey) {
+    return null;
+  }
+
+  const encoded = encodeURIComponent(trimmed);
+  let data: { status?: string; results?: unknown[] };
+  try {
+    const res = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?address=${encoded}&key=${mapsKey}`
+    );
+    data = await res.json();
+  } catch {
+    return null;
+  }
+
+  if (data.status !== "OK" || !data.results?.length) {
     return {
       address_formatted: null,
       address_lat: null,
@@ -37,13 +51,13 @@ export async function validateAddress(rawAddress?: string | null): Promise<Addre
     };
   }
 
-  const result = data.results[0];
+  const result = data.results[0] as GeocodeResult;
   const components = result.address_components;
 
   const getComponent = (type: string) =>
     components.find((c: { types: string[]; long_name: string }) => c.types.includes(type))?.long_name || null;
 
-  const qualityScore = computeAddressQuality(rawAddress, result);
+  const qualityScore = computeAddressQuality(trimmed, result);
 
   return {
     address_formatted: result.formatted_address,
@@ -88,7 +102,13 @@ export function computeAddressQuality(rawAddress: string, geocodeResult: Geocode
 }
 
 export function getAddressRiskScore(addressResult?: AddressResult | null) {
-  if (!addressResult || !addressResult.address_found) {
+  /** No address submitted — do not penalize the score. */
+  if (!addressResult) {
+    return { score: 0, signals: [] };
+  }
+
+  /** Address was submitted but geocoding failed or returned nothing. */
+  if (!addressResult.address_found) {
     return {
       score: 35,
       signals: [{ name: "address_not_found", impact: -35, description: "Address could not be located on map" }]

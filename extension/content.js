@@ -17,10 +17,11 @@ let observerActive = false;
 let pendingDebounce = null;
 let lastSyncedPath = "";
 
-function queryWithFallbacks(selectors) {
+function queryWithFallbacks(selectors, root = document) {
+  const base = root?.querySelector ? root : document;
   for (const selector of selectors) {
     try {
-      const el = document.querySelector(selector);
+      const el = base.querySelector(selector);
       if (el) return el;
     } catch (_error) {
       // Ignore invalid selectors and continue fallback scan.
@@ -29,10 +30,11 @@ function queryWithFallbacks(selectors) {
   return null;
 }
 
-function queryAllWithFallbacks(selectors) {
+function queryAllWithFallbacks(selectors, root = document) {
+  const base = root?.querySelectorAll ? root : document;
   for (const selector of selectors) {
     try {
-      const elements = document.querySelectorAll(selector);
+      const elements = base.querySelectorAll(selector);
       if (elements.length) return Array.from(elements);
     } catch (_error) {
       // Continue trying selector fallback candidates.
@@ -45,10 +47,10 @@ function queryAllWithFallbacks(selectors) {
  * When structured message nodes are not found, Instagram still exposes the thread as plain text.
  * The API needs at least 2 messages — never send a single giant blob.
  */
-function extractChatFallback() {
-  const main = document.querySelector("[role='main']");
-  if (!main) return [];
-  const rawText = (main.innerText || "").trim();
+function extractChatFallback(threadRoot) {
+  const root = threadRoot || document.querySelector("[role='main']");
+  if (!root) return [];
+  const rawText = (root.innerText || "").trim();
   if (!rawText) return [];
 
   let segments = rawText
@@ -81,15 +83,104 @@ function extractChatFallback() {
   }));
 }
 
-function extractChatMessages() {
-  const messageNodes = queryAllWithFallbacks([
-    "[role='listitem']",
-    "[role='row']",
-    "[data-testid*='message']",
-    "div[role='row']",
-    "[class*='messageList'] [role='presentation']",
-    "[class*='message']"
-  ]);
+/** Prefer scrollable column inside the open DM (not the inbox list). */
+function findMessageScrollContainer(within) {
+  const root = within?.querySelector ? within : document.querySelector("[role='main']");
+  if (!root?.querySelectorAll) return null;
+  let best = null;
+  let bestH = 0;
+  root.querySelectorAll("div").forEach((el) => {
+    const st = window.getComputedStyle(el);
+    const oy = st.overflowY;
+    if (oy !== "auto" && oy !== "scroll") return;
+    const h = el.scrollHeight - el.clientHeight;
+    if (h > 120 && el.scrollHeight > bestH) {
+      bestH = el.scrollHeight;
+      best = el;
+    }
+  });
+  return best;
+}
+
+function findActiveThreadPanel() {
+  const header = findChatHeaderToolbar();
+  const main = document.querySelector("[role='main']");
+  if (!header || !main) return main || document.body;
+
+  let node = header.parentElement;
+  for (let i = 0; i < 22 && node; i++) {
+    const rows = node.querySelectorAll("[role='row'], [role='listitem'], div[role='presentation']");
+    if (rows.length >= 4) return node;
+    node = node.parentElement;
+  }
+
+  const scrollHost = findMessageScrollContainer(main);
+  return scrollHost || main;
+}
+
+/**
+ * Instagram lazy-loads older DM bubbles while scrolling up.
+ * Scroll to top repeatedly until height stabilizes so extract sees full thread.
+ */
+async function ensureChatHistoryLoaded() {
+  const panel = findActiveThreadPanel();
+  const scrollEl = findMessageScrollContainer(panel) || findMessageScrollContainer(document.querySelector("[role='main']"));
+  if (!scrollEl) return;
+
+  let stable = 0;
+  let lastH = -1;
+  for (let pass = 0; pass < 48; pass++) {
+    scrollEl.scrollTop = 0;
+    await new Promise((r) => setTimeout(r, 420));
+    const h = scrollEl.scrollHeight;
+    if (h <= lastH + 8) {
+      stable++;
+      if (stable >= 4) break;
+    } else {
+      stable = 0;
+      lastH = h;
+    }
+  }
+}
+
+function dedupeMessages(messages) {
+  const out = [];
+  let prev = null;
+  messages.forEach((m) => {
+    if (prev && prev.text === m.text && prev.role === m.role) return;
+    out.push(m);
+    prev = m;
+  });
+  return out;
+}
+
+function sanitizeMessages(messages) {
+  const junkLine =
+    /^(Unread|Primary|General|Requests|Obsessed|Your note|Active|Verify|Analyze Buyer|sent an attachment|You forwarded|replied to you)/i;
+  const noiseShort = /^(·|…)$/;
+
+  return messages.filter((m) => {
+    const t = (m.text || "").trim();
+    if (t.length < 2 || noiseShort.test(t)) return false;
+    const lines = t.split("\n").map((s) => s.trim()).filter(Boolean);
+    if (lines.some((line) => junkLine.test(line))) return false;
+    if (t.includes("Instagram") && t.length < 80) return false;
+    return true;
+  });
+}
+
+function extractChatMessages(threadRoot) {
+  const root = threadRoot || findActiveThreadPanel();
+
+  const messageNodes = queryAllWithFallbacks(
+    [
+      "[role='row']",
+      "[role='listitem']",
+      "[data-testid*='message']",
+      "[class*='messageList'] [role='presentation']"
+    ],
+    root
+  );
 
   const messages = [];
   messageNodes.forEach((el) => {
@@ -109,16 +200,18 @@ function extractChatMessages() {
     });
   });
 
-  if (messages.length < 2) {
-    const fallback = extractChatFallback();
+  let cleaned = dedupeMessages(sanitizeMessages(messages));
+
+  if (cleaned.length < 2) {
+    const fallback = dedupeMessages(sanitizeMessages(extractChatFallback(root)));
     if (fallback.length >= 2) return fallback;
   }
 
-  if (!messages.length) {
-    return extractChatFallback();
+  if (!cleaned.length) {
+    return dedupeMessages(sanitizeMessages(extractChatFallback(root)));
   }
 
-  return messages;
+  return cleaned;
 }
 
 function findChatHeaderToolbar() {
@@ -186,15 +279,65 @@ function renderPanelBase(username) {
   return panel;
 }
 
-function openAnalysisPanel() {
-  const messages = extractChatMessages();
+async function openAnalysisPanel() {
   const username = extractBuyerUsername() || "unknown_buyer";
+  renderLoadingPanel(username, "Loading full conversation… scroll may take a few seconds.");
+  try {
+    await ensureChatHistoryLoaded();
+  } catch (_e) {
+    // Continue with whatever loaded.
+  }
+
+  const messages = extractChatMessages();
+  if (!messages || messages.length < 2) {
+    renderErrorPanel(
+      username,
+      "Could not read enough messages in this thread. Open the chat thread fully and try again."
+    );
+    return;
+  }
+
   renderPanelBase(username);
   document.getElementById("rs-submit-analysis")?.addEventListener("click", () => {
     const phone = document.getElementById("rs-phone")?.value || "";
     const address = document.getElementById("rs-address")?.value || "";
     submitForAnalysis({ messages, username, phone, address });
   });
+}
+
+function renderLoadingPanel(username, note) {
+  closePanel();
+  const panel = document.createElement("div");
+  panel.id = "rs-panel";
+  panel.className = "rs-panel";
+  panel.innerHTML = `
+      <button class="rs-close" id="rs-close-panel">×</button>
+      <div class="rs-panel-inner">
+        <h3 class="rs-panel-title">ReturnSense Analysis</h3>
+        <p class="rs-popup-help">@${username || "unknown"}</p>
+        <div style="display:flex;justify-content:center;padding:24px 0;"><div class="rs-spinner"></div></div>
+        <p class="rs-popup-help" style="text-align:center;">${note}</p>
+      </div>
+    `;
+  document.body.appendChild(panel);
+  document.getElementById("rs-close-panel")?.addEventListener("click", closePanel);
+}
+
+function renderErrorPanel(username, msg) {
+  closePanel();
+  const panel = document.createElement("div");
+  panel.id = "rs-panel";
+  panel.className = "rs-panel";
+  panel.innerHTML = `
+      <button class="rs-close" id="rs-close-panel">×</button>
+      <div class="rs-panel-inner">
+        <h3 class="rs-panel-title">ReturnSense</h3>
+        <p><strong>@${username}</strong></p>
+        <p class="rs-popup-help" style="color:#ed4956;">${msg}</p>
+      </div>
+    `;
+  document.body.appendChild(panel);
+  document.getElementById("rs-close-panel")?.addEventListener("click", closePanel);
 }
 
 function getTokenFromBackground() {
@@ -283,9 +426,27 @@ function displayResult(result) {
   if (!panel) return;
   const score = result.trust_score;
   const color = score >= 75 ? "#16a34a" : score >= 55 ? "#ca8a04" : score >= 35 ? "#ea580c" : "#dc2626";
-  const phone = result.phone_analysis || {};
-  const address = result.address_analysis || {};
-  const quality = address.address_quality_score || 0;
+  const phone = result.phone_analysis;
+  const address = result.address_analysis;
+  const quality = address && typeof address.address_quality_score === "number" ? address.address_quality_score : 0;
+
+  const phoneHtml =
+    phone == null
+      ? `<p class="rs-popup-help">Phone not verified — add a number in the panel and set <code>ABSTRACT_API_KEY</code> on the server for carrier checks.</p>`
+      : `<div class="rs-kv"><span>Status</span><b>${phone.phone_valid ? "Valid" : "Invalid"}</b></div>
+         <div class="rs-kv"><span>Carrier</span><b>${phone.phone_carrier || "—"}</b></div>
+         <div class="rs-kv"><span>Type</span><b>${phone.phone_type || "—"}</b></div>
+         <div class="rs-kv"><span>Country</span><b>${phone.phone_country || "—"}</b></div>
+         ${phone.phone_is_voip ? '<span class="rs-signal-negative">VoIP warning</span>' : ""}`;
+
+  const addressHtml =
+    address == null
+      ? `<p class="rs-popup-help">Address not geocoded — add a full address in the panel and <code>GOOGLE_MAPS_API_KEY</code> on the server.</p>`
+      : `<p class="rs-addr-line">${address.address_formatted || "Not found on map"}</p>
+         <div class="rs-kv"><span>Quality</span><b>${quality}/100</b></div>
+         <div style="height:8px;background:var(--ig-border);border-radius:999px;overflow:hidden;">
+           <div style="height:100%;width:${quality}%;background:${quality > 60 ? "#16a34a" : quality > 35 ? "#ea580c" : "#ed4956"};"></div>
+         </div>`;
 
   panel.innerHTML = `
       <button class="rs-close" id="rs-close-panel">×</button>
@@ -294,20 +455,13 @@ function displayResult(result) {
         <div class="rs-risk-badge" style="background:${color};">${result.risk_level.toUpperCase()} RISK</div>
 
         <div class="rs-section">
-          <strong>Phone Analysis</strong>
-          <span>${phone.phone_valid ? "✅ Valid" : "❌ Invalid"}</span>
-          <span>${phone.phone_carrier || "Carrier unavailable"}</span>
-          <span>${phone.phone_type || ""}</span>
-          ${phone.phone_is_voip ? '<span class="rs-signal-negative">VoIP Warning</span>' : ""}
+          <strong>Phone analysis</strong>
+          ${phoneHtml}
         </div>
 
         <div class="rs-section">
-          <strong>Address Analysis</strong>
-          <span>${address.address_formatted || "Address not found"}</span>
-          <span>Quality: ${quality}/100</span>
-          <div style="height:8px;background:#e2e8f0;border-radius:999px;overflow:hidden;">
-            <div style="height:100%;width:${quality}%;background:${quality > 60 ? "#16a34a" : quality > 35 ? "#ea580c" : "#dc2626"};"></div>
-          </div>
+          <strong>Address analysis</strong>
+          ${addressHtml}
         </div>
 
         <div class="rs-section">
