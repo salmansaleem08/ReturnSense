@@ -707,12 +707,41 @@ function extractBuyerUsername() {
   return "unknown_buyer";
 }
 
+/** @type {HTMLElement | null} */
+let rsMainMarginElement = null;
+let lastUsername = "unknown_buyer";
+/** @type {Array<{ role: string; text: string }>} */
+let lastMessages = [];
+
+function escapeHtml(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function applyInstagramMainMargin() {
+  removeInstagramMainMargin();
+  const main = document.querySelector('[role="main"]');
+  const wrap = main?.closest?.("div[style]") ?? main ?? document.body;
+  rsMainMarginElement = wrap;
+  if (wrap?.style) wrap.style.marginRight = "400px";
+}
+
+function removeInstagramMainMargin() {
+  if (rsMainMarginElement?.style) rsMainMarginElement.style.marginRight = "";
+  rsMainMarginElement = null;
+}
+
 function closePanel() {
+  removeInstagramMainMargin();
   document.getElementById("rs-panel")?.remove();
 }
 
 function showExtractionLoadingPanel() {
   closePanel();
+  applyInstagramMainMargin();
   const panel = document.createElement("div");
   panel.id = "rs-panel";
   panel.innerHTML = `
@@ -728,37 +757,79 @@ function showExtractionLoadingPanel() {
   if (closeBtn) closeBtn.addEventListener("click", () => closePanel());
 }
 
-function renderPanelBase(username, messages) {
+/**
+ * @param {string} username
+ * @param {Array<{ role: string; text: string }>} messages
+ */
+function openAnalysisPanel(username, messages) {
+  const detectedPhone = autoDetectPhone(messages);
+  const detectedAddress = autoDetectAddress(messages);
+
+  const safeUser = escapeHtml(username || "unknown_buyer");
   const msgCount = Array.isArray(messages) ? messages.length : 0;
-  const lowMsgWarning =
+  const scrollWarn =
     msgCount < 3
-      ? `<p class="rs-popup-help" style="color:#6B7280;font-size:12px;">Only ${msgCount} message(s) found — analysis may have limited accuracy</p>`
+      ? `<div style="color:#6B7280;font-size:11px;margin-bottom:8px;">Only ${msgCount} message(s) read — try scrolling the chat before analyzing</div>`
       : "";
 
+  const phoneVal = escapeHtml(detectedPhone ?? "");
+  const addrEscaped = escapeHtml(detectedAddress ?? "");
+
+  const phoneAutoStyle = detectedPhone ? "color:#16a34a;" : "color:#9CA3AF;";
+  const addrAutoStyle = detectedAddress ? "color:#16a34a;" : "color:#9CA3AF;";
+  const phoneAutoText = detectedPhone ? "✓ Auto-detected from chat" : "Not detected — enter manually";
+  const addrAutoText = detectedAddress ? "✓ Auto-detected from chat" : "Not detected — enter manually";
+
   closePanel();
+  applyInstagramMainMargin();
+
   const panel = document.createElement("div");
   panel.id = "rs-panel";
-  panel.className = "rs-panel";
   panel.innerHTML = `
-      <button class="rs-close" id="rs-close-panel">×</button>
-      <div class="rs-panel-inner">
-        <h3 class="rs-panel-title">ReturnSense Analysis</h3>
-        <p>Buyer: <strong>@${username || "unknown"}</strong></p>
-        <label>Phone Number</label>
-        <input id="rs-phone" class="rs-popup-input" placeholder="+92 300 1234567" />
-        <label>Delivery Address</label>
-        <textarea id="rs-address" class="rs-popup-input" rows="3" placeholder="House 12, Street 5, DHA Phase 2, Lahore"></textarea>
-        ${lowMsgWarning}
-        <button id="rs-submit-analysis" class="rs-popup-button rs-popup-button-primary">Run Analysis</button>
-        <p class="rs-popup-help">Conversation content will be analyzed by AI.</p>
+    <div id="rs-panel-header">
+      <span>🛡 ReturnSense</span>
+      <button type="button" class="rs-close-btn" id="rs-close-panel" aria-label="Close">×</button>
+    </div>
+    <div id="rs-panel-body">
+      <div class="rs-card">
+        <div class="rs-card-body">
+          <div style="color:#6B7280;font-size:12px;margin-bottom:10px;">Analyzing buyer: <strong style="color:#1E40AF;">@${safeUser}</strong></div>
+          <label style="display:block;font-weight:600;color:#374151;font-size:13px;">📱 Phone Number</label>
+          <input id="rs-phone" class="rs-input" type="text" value="${phoneVal}" autocomplete="off" />
+          <div class="rs-auto-label" style="${phoneAutoStyle}">${phoneAutoText}</div>
+          <label style="display:block;margin-top:10px;font-weight:600;color:#374151;font-size:13px;">📍 Delivery Address</label>
+          <textarea id="rs-address" class="rs-input" rows="3">${addrEscaped}</textarea>
+          <div class="rs-auto-label" style="${addrAutoStyle}">${addrAutoText}</div>
+          ${scrollWarn}
+          <button type="button" id="rs-submit" class="rs-action-btn rs-btn-primary" style="margin-top:10px;">Run Analysis</button>
+        </div>
       </div>
-    `;
+    </div>`;
   document.body.appendChild(panel);
-  document.getElementById("rs-close-panel")?.addEventListener("click", closePanel);
-  return panel;
+
+  const closeBtn = document.getElementById("rs-close-panel");
+  if (closeBtn) closeBtn.addEventListener("click", () => closePanel());
+
+  const submitBtn = document.getElementById("rs-submit");
+  if (submitBtn) {
+    submitBtn.addEventListener("click", () => {
+      const phoneEl = document.getElementById("rs-phone");
+      const addrEl = document.getElementById("rs-address");
+      const phoneValue =
+        phoneEl && typeof phoneEl.value === "string" ? phoneEl.value.trim() : "";
+      const addressValue =
+        addrEl && typeof addrEl.value === "string" ? addrEl.value.trim() : "";
+      submitForAnalysis({
+        messages,
+        username: username || "unknown_buyer",
+        phone: phoneValue || null,
+        address: addressValue || null
+      });
+    });
+  }
 }
 
-async function openAnalysisPanel() {
+async function launchBuyerAnalysis() {
   showExtractionLoadingPanel();
   try {
     await ensureChatHistoryLoaded();
@@ -768,13 +839,7 @@ async function openAnalysisPanel() {
 
   const messages = await extractChatMessages();
   const username = extractBuyerUsername() || "unknown_buyer";
-
-  renderPanelBase(username, messages);
-  document.getElementById("rs-submit-analysis")?.addEventListener("click", () => {
-    const phone = document.getElementById("rs-phone")?.value || "";
-    const address = document.getElementById("rs-address")?.value || "";
-    submitForAnalysis({ messages, username, phone, address });
-  });
+  openAnalysisPanel(username, messages);
 }
 
 function getTokenFromBackground() {
@@ -926,7 +991,7 @@ function ensureFloatingAnalyzeButton() {
   fab.textContent = "🛡 Analyze";
   fab.title = "ReturnSense — analyze this chat";
   fab.setAttribute("aria-label", "ReturnSense analyze buyer");
-  fab.addEventListener("click", () => void openAnalysisPanel());
+  fab.addEventListener("click", () => void launchBuyerAnalysis());
   document.body.appendChild(fab);
 }
 
@@ -947,7 +1012,7 @@ function tryInjectButton() {
     btn.className = "rs-btn";
     btn.textContent = "🛡 Analyze Buyer";
     btn.title = "ReturnSense — analyze this buyer";
-    btn.addEventListener("click", () => void openAnalysisPanel());
+    btn.addEventListener("click", () => void launchBuyerAnalysis());
     header.appendChild(btn);
     return;
   }
@@ -962,6 +1027,7 @@ function tryDetectChat() {
 function stopDirectMode() {
   document.getElementById("rs-analyze-btn")?.remove();
   removeFloatingAnalyzeButton();
+  removeInstagramMainMargin();
   document.getElementById("rs-panel")?.remove();
   if (bodyObserver) {
     bodyObserver.disconnect();
