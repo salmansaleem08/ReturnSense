@@ -30,59 +30,6 @@ function queryWithFallbacks(selectors, root = document) {
   return null;
 }
 
-function queryAllWithFallbacks(selectors, root = document) {
-  const base = root?.querySelectorAll ? root : document;
-  for (const selector of selectors) {
-    try {
-      const elements = base.querySelectorAll(selector);
-      if (elements.length) return Array.from(elements);
-    } catch (_error) {
-      // Continue trying selector fallback candidates.
-    }
-  }
-  return [];
-}
-
-/**
- * When structured message nodes are not found, Instagram still exposes the thread as plain text.
- * The API needs at least 2 messages — never send a single giant blob.
- */
-function extractChatFallback(threadRoot) {
-  const root = threadRoot || document.querySelector("[role='main']");
-  if (!root) return [];
-  const rawText = (root.innerText || "").trim();
-  if (!rawText) return [];
-
-  let segments = rawText
-    .split(/\n{2,}/)
-    .map((s) => s.trim())
-    .filter((s) => s.length >= 3);
-
-  if (segments.length < 2) {
-    segments = rawText
-      .split("\n")
-      .map((s) => s.trim())
-      .filter((s) => s.length >= 3);
-  }
-
-  if (segments.length < 2 && rawText.length >= 80) {
-    const mid = Math.floor(rawText.length / 2);
-    const a = rawText.slice(0, mid).trim();
-    const b = rawText.slice(mid).trim();
-    segments = [a, b].filter((s) => s.length >= 2);
-  }
-
-  if (segments.length < 2) {
-    return [];
-  }
-
-  return segments.map((text, i) => ({
-    role: i % 2 === 0 ? "buyer" : "seller",
-    text,
-    timestamp: null
-  }));
-}
-
 /** Prefer scrollable column inside the open DM (not the inbox list). */
 function findMessageScrollContainer(within) {
   const root = within?.querySelector ? within : document.querySelector("[role='main']");
@@ -158,99 +105,180 @@ async function ensureChatHistoryLoaded() {
   }
 }
 
-function dedupeMessages(messages) {
+function dedupeConsecutiveByText(messages) {
   const out = [];
-  let prev = null;
-  messages.forEach((m) => {
-    if (prev && prev.text === m.text && prev.role === m.role) return;
-    out.push(m);
-    prev = m;
-  });
+  let prevText = null;
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    const t = (m?.text || "").trim();
+    if (t === prevText) continue;
+    out.push({ role: m.role, text: t });
+    prevText = t;
+  }
   return out;
 }
 
-function sanitizeMessages(messages) {
-  const headerOnly = /^(Unread|Primary|General|Requests)$/i;
-  return messages.filter((m) => {
-    const t = (m.text || "").trim();
-    if (t.length < 1) return false;
-    const first = t.split("\n")[0].trim();
-    if (first.length < 80 && headerOnly.test(first) && t.split("\n").length === 1) return false;
-    return true;
-  });
-}
+const TIMESTAMP_LINE_RE = /^\d{1,2}:\d{2}(\s?(AM|PM))?$/i;
+const DATE_SEPARATOR_RE = /^(Today|Yesterday|\w+ \d{1,2},?\s*\d{0,4})$/i;
 
-function extractChatMessages(threadRoot) {
-  const root = threadRoot || findActiveThreadPanel();
+const STRATEGY3_SKIP_LABELS = new Set([
+  "active now",
+  "seen",
+  "delivered",
+  "read",
+  "send message",
+  "voice clip",
+  "photo",
+  "video",
+  "like",
+  "unsend"
+]);
 
-  const messageNodes = queryAllWithFallbacks(
-    [
-      "[role='row']",
-      "[role='listitem']",
-      "[data-testid*='message']",
-      "[class*='messageList'] [role='presentation']"
-    ],
-    root
-  );
-
-  const messages = [];
-  messageNodes.forEach((el) => {
-    const text = el.innerText?.trim();
-    if (!text || text.length < 2) return;
-    const computed = window.getComputedStyle(el);
-    const parentComputed = el.parentElement ? window.getComputedStyle(el.parentElement) : null;
-    const isSeller =
-      computed.justifyContent.includes("flex-end") ||
-      parentComputed?.justifyContent?.includes("flex-end") ||
-      el.closest("[style*='flex-end']") !== null;
-
-    messages.push({
-      role: isSeller ? "seller" : "buyer",
-      text,
-      timestamp: el.querySelector("time")?.getAttribute("datetime") || null
-    });
-  });
-
-  let cleaned = dedupeMessages(sanitizeMessages(messages));
-
-  if (cleaned.length < 2 && messages.length >= 2) {
-    cleaned = dedupeMessages(messages);
-  }
-
-  if (cleaned.length < 2) {
-    const fallback = dedupeMessages(sanitizeMessages(extractChatFallback(root)));
-    if (fallback.length >= 2) return fallback;
-  }
-
-  if (!cleaned.length) {
-    return dedupeMessages(sanitizeMessages(extractChatFallback(root)));
-  }
-
-  return cleaned;
-}
-
-/** Last resort: any row in thread without aggressive filtering. */
-function extractChatMessagesRelaxed() {
-  const root = findActiveThreadPanel();
-  const nodes = root.querySelectorAll("[role='row'], [role='listitem'], li[role='listitem']");
+function extractStrategyListItems() {
+  const main = document.querySelector('[role="main"]');
+  if (!main?.querySelectorAll) return [];
+  const items = main.querySelectorAll('[role="listitem"]');
   const out = [];
-  nodes.forEach((el) => {
-    const text = el.innerText?.trim();
-    if (!text || text.length < 1) return;
-    const computed = window.getComputedStyle(el);
-    const parentComputed = el.parentElement ? window.getComputedStyle(el.parentElement) : null;
-    const isSeller =
-      computed.justifyContent.includes("flex-end") ||
-      parentComputed?.justifyContent?.includes("flex-end") ||
-      el.closest("[style*='flex-end']") !== null;
-    out.push({
-      role: isSeller ? "seller" : "buyer",
-      text,
-      timestamp: el.querySelector("time")?.getAttribute("datetime") || null
-    });
-  });
-  const d = dedupeMessages(out);
-  return d.length >= 2 ? d : [];
+  for (let i = 0; i < items.length; i++) {
+    const el = items[i];
+    if (!el) continue;
+    const inner = typeof el.innerText === "string" ? el.innerText : "";
+    const text = inner.trim();
+    if (text.length < 3) continue;
+    if (TIMESTAMP_LINE_RE.test(text)) continue;
+    if (DATE_SEPARATOR_RE.test(text)) continue;
+    let isSeller = false;
+    let ancestor = el;
+    for (let d = 0; d < 6 && ancestor; d++) {
+      const st = window.getComputedStyle(ancestor);
+      if (st?.justifyContent?.includes("flex-end")) {
+        isSeller = true;
+        break;
+      }
+      ancestor = ancestor.parentElement;
+    }
+    out.push({ role: isSeller ? "seller" : "buyer", text });
+  }
+  return dedupeConsecutiveByText(out);
+}
+
+function findScrollableDivInMain() {
+  const main = document.querySelector('[role="main"]');
+  if (!main?.querySelectorAll) return null;
+  const divs = main.querySelectorAll("div");
+  for (let i = 0; i < divs.length; i++) {
+    const el = divs[i];
+    if (!el) continue;
+    const st = window.getComputedStyle(el);
+    const oy = st?.overflowY;
+    if (oy === "auto" || oy === "scroll" || oy === "overlay") return el;
+  }
+  return null;
+}
+
+function hasButtonOrInputDescendants(el) {
+  if (!el?.querySelector) return false;
+  return Boolean(el.querySelector("button, input"));
+}
+
+function walkCollectMessagesFromScrollHost(node, depth, maxDepth, acc) {
+  if (!node || depth > maxDepth) return;
+  const kids = node.children;
+  if (!kids?.length) {
+    if (!hasButtonOrInputDescendants(node)) {
+      const inner = typeof node.innerText === "string" ? node.innerText.trim() : "";
+      if (inner.length > 4) acc.push({ role: "unknown", text: inner });
+    }
+    return;
+  }
+  for (let i = 0; i < kids.length; i++) {
+    walkCollectMessagesFromScrollHost(kids[i], depth + 1, maxDepth, acc);
+  }
+}
+
+function extractStrategyScrollable() {
+  const host = findScrollableDivInMain();
+  if (!host?.children?.length) return [];
+  const acc = [];
+  for (let i = 0; i < host.children.length; i++) {
+    walkCollectMessagesFromScrollHost(host.children[i], 0, 3, acc);
+  }
+  return dedupeConsecutiveByText(acc);
+}
+
+function extractStrategyMainTextFallback() {
+  const main = document.querySelector('[role="main"]');
+  const raw = main && typeof main.innerText === "string" ? main.innerText : "";
+  if (!raw) return [];
+  const lines = raw.split("\n");
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = (lines[i] || "").trim();
+    if (line.length < 3) continue;
+    if (TIMESTAMP_LINE_RE.test(line)) continue;
+    const low = line.toLowerCase();
+    if (STRATEGY3_SKIP_LABELS.has(low)) continue;
+    out.push({ role: "unknown", text: line });
+  }
+  return dedupeConsecutiveByText(out);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function setRsLoadingStatus(text) {
+  const el = document.getElementById("rs-loading-status");
+  if (el) el.textContent = text;
+}
+
+/**
+ * Reads DM messages with retries and multiple strategies. Always returns an array (possibly empty).
+ */
+async function extractChatMessages() {
+  setRsLoadingStatus("Reading chat... (attempt 1/8)");
+
+  let best = [];
+
+  for (let attempt = 1; attempt <= 8; attempt++) {
+    setRsLoadingStatus(`Reading chat... (attempt ${attempt}/8)`);
+
+    let usedStrategy = 0;
+    let batch = [];
+
+    batch = extractStrategyListItems();
+    if (batch.length) usedStrategy = 1;
+    if (batch.length >= 3) {
+      console.log(`[RS] Extracted ${batch.length} messages via strategy 1`);
+      return batch;
+    }
+
+    const s2 = extractStrategyScrollable();
+    if (s2.length > batch.length) {
+      batch = s2;
+      usedStrategy = 2;
+    }
+    if (batch.length >= 3) {
+      console.log(`[RS] Extracted ${batch.length} messages via strategy ${usedStrategy || 2}`);
+      return batch;
+    }
+
+    const s3 = extractStrategyMainTextFallback();
+    if (s3.length > batch.length) {
+      batch = s3;
+      usedStrategy = 3;
+    }
+
+    console.log(`[RS] Extracted ${batch.length} messages via strategy ${usedStrategy || 3}`);
+
+    if (batch.length >= 3) return batch;
+
+    if (batch.length > best.length) best = batch;
+
+    if (attempt < 8) await sleep(500);
+  }
+
+  return best.length ? best : [];
 }
 
 const IG_USERNAME_RESERVED = new Set([
@@ -478,7 +506,30 @@ function closePanel() {
   document.getElementById("rs-panel")?.remove();
 }
 
-function renderPanelBase(username) {
+function showExtractionLoadingPanel() {
+  closePanel();
+  const panel = document.createElement("div");
+  panel.id = "rs-panel";
+  panel.innerHTML = `
+    <div id="rs-panel-header">
+      <span>🛡 ReturnSense</span>
+      <button type="button" class="rs-close-btn" id="rs-close-extract" aria-label="Close">×</button>
+    </div>
+    <div id="rs-panel-body">
+      <p id="rs-loading-status" style="color:#6B7280;font-size:12px;margin:0;">Reading chat... (attempt 1/8)</p>
+    </div>`;
+  document.body.appendChild(panel);
+  const closeBtn = document.getElementById("rs-close-extract");
+  if (closeBtn) closeBtn.addEventListener("click", () => closePanel());
+}
+
+function renderPanelBase(username, messages) {
+  const msgCount = Array.isArray(messages) ? messages.length : 0;
+  const lowMsgWarning =
+    msgCount < 3
+      ? `<p class="rs-popup-help" style="color:#6B7280;font-size:12px;">Only ${msgCount} message(s) found — analysis may have limited accuracy</p>`
+      : "";
+
   closePanel();
   const panel = document.createElement("div");
   panel.id = "rs-panel";
@@ -492,6 +543,7 @@ function renderPanelBase(username) {
         <input id="rs-phone" class="rs-popup-input" placeholder="+92 300 1234567" />
         <label>Delivery Address</label>
         <textarea id="rs-address" class="rs-popup-input" rows="3" placeholder="House 12, Street 5, DHA Phase 2, Lahore"></textarea>
+        ${lowMsgWarning}
         <button id="rs-submit-analysis" class="rs-popup-button rs-popup-button-primary">Run Analysis</button>
         <p class="rs-popup-help">Conversation content will be analyzed by AI.</p>
       </div>
@@ -502,69 +554,22 @@ function renderPanelBase(username) {
 }
 
 async function openAnalysisPanel() {
-  renderLoadingPanel("…", "Loading full conversation…");
+  showExtractionLoadingPanel();
   try {
     await ensureChatHistoryLoaded();
   } catch (_e) {
     // Continue with whatever loaded.
   }
 
-  let username =
-    extractBuyerUsername() || extractUsernameFromPageLinks() || "unknown_buyer";
+  const messages = await extractChatMessages();
+  const username = extractBuyerUsername() || "unknown_buyer";
 
-  let messages = extractChatMessages();
-  if (!messages || messages.length < 2) {
-    messages = extractChatMessagesRelaxed();
-  }
-  if (!messages || messages.length < 2) {
-    renderErrorPanel(
-      username,
-      "Could not read enough messages. Open the DM thread (click the conversation), wait for messages to load, then tap Analyze again."
-    );
-    return;
-  }
-
-  renderPanelBase(username);
+  renderPanelBase(username, messages);
   document.getElementById("rs-submit-analysis")?.addEventListener("click", () => {
     const phone = document.getElementById("rs-phone")?.value || "";
     const address = document.getElementById("rs-address")?.value || "";
     submitForAnalysis({ messages, username, phone, address });
   });
-}
-
-function renderLoadingPanel(username, note) {
-  closePanel();
-  const panel = document.createElement("div");
-  panel.id = "rs-panel";
-  panel.className = "rs-panel";
-  panel.innerHTML = `
-      <button class="rs-close" id="rs-close-panel">×</button>
-      <div class="rs-panel-inner">
-        <h3 class="rs-panel-title">ReturnSense Analysis</h3>
-        <p class="rs-popup-help">@${username || "unknown"}</p>
-        <div style="display:flex;justify-content:center;padding:24px 0;"><div class="rs-spinner"></div></div>
-        <p class="rs-popup-help" style="text-align:center;">${note}</p>
-      </div>
-    `;
-  document.body.appendChild(panel);
-  document.getElementById("rs-close-panel")?.addEventListener("click", closePanel);
-}
-
-function renderErrorPanel(username, msg) {
-  closePanel();
-  const panel = document.createElement("div");
-  panel.id = "rs-panel";
-  panel.className = "rs-panel";
-  panel.innerHTML = `
-      <button class="rs-close" id="rs-close-panel">×</button>
-      <div class="rs-panel-inner">
-        <h3 class="rs-panel-title">ReturnSense</h3>
-        <p><strong>@${username}</strong></p>
-        <p class="rs-popup-help rs-error-text">${msg}</p>
-      </div>
-    `;
-  document.body.appendChild(panel);
-  document.getElementById("rs-close-panel")?.addEventListener("click", closePanel);
 }
 
 function getTokenFromBackground() {
@@ -716,7 +721,7 @@ function ensureFloatingAnalyzeButton() {
   fab.textContent = "🛡 Analyze";
   fab.title = "ReturnSense — analyze this chat";
   fab.setAttribute("aria-label", "ReturnSense analyze buyer");
-  fab.addEventListener("click", openAnalysisPanel);
+  fab.addEventListener("click", () => void openAnalysisPanel());
   document.body.appendChild(fab);
 }
 
@@ -737,7 +742,7 @@ function tryInjectButton() {
     btn.className = "rs-btn";
     btn.textContent = "🛡 Analyze Buyer";
     btn.title = "ReturnSense — analyze this buyer";
-    btn.addEventListener("click", openAnalysisPanel);
+    btn.addEventListener("click", () => void openAnalysisPanel());
     header.appendChild(btn);
     return;
   }
