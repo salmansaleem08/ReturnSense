@@ -44,18 +44,24 @@ export function PhoneCard({ data }: { data: PhoneData }) {
         </p>
         {validated ? (
           <>
-            <p>
-              <span className="text-muted-foreground">Carrier: </span>
-              {data.phone_carrier ?? "—"}
-            </p>
-            <p>
-              <span className="text-muted-foreground">Type: </span>
-              {data.phone_type ?? "—"}
-            </p>
-            <p>
-              <span className="text-muted-foreground">Country: </span>
-              {data.phone_country ?? "—"}
-            </p>
+            {data.phone_carrier?.trim() ? (
+              <p>
+                <span className="text-muted-foreground">Carrier: </span>
+                {data.phone_carrier}
+              </p>
+            ) : null}
+            {data.phone_type?.trim() ? (
+              <p>
+                <span className="text-muted-foreground">Type: </span>
+                {data.phone_type}
+              </p>
+            ) : null}
+            {data.phone_country?.trim() ? (
+              <p>
+                <span className="text-muted-foreground">Country: </span>
+                {data.phone_country}
+              </p>
+            ) : null}
             {data.phone_is_voip ? (
               <p className="font-semibold text-destructive">VoIP warning — higher COD risk</p>
             ) : null}
