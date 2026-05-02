@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
@@ -115,13 +116,18 @@ export default function LoginPage() {
   }
 
   return (
-    <Card className="w-full max-w-[400px] rounded-[var(--radius-lg)] border border-border bg-card shadow-ig dark:shadow-ig-dark">
+    <Card className="w-full max-w-md border border-border bg-card shadow-sm">
       <CardHeader className="space-y-4 text-center">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-[#FCAF45] via-[#E1306C] to-[#833AB4] text-lg font-bold text-white">
-          RS
-        </div>
+        <Image
+          src="/logo.svg"
+          alt="ReturnSense"
+          width={128}
+          height={128}
+          className="mx-auto h-24 w-24"
+          priority
+        />
         <div>
-          <CardTitle className="text-base font-semibold leading-snug">ReturnSense</CardTitle>
+          <CardTitle className="text-2xl font-bold leading-none">ReturnSense</CardTitle>
           <CardDescription className="text-sm text-muted-foreground">
             Sign in to manage buyer risk intelligence.
           </CardDescription>
@@ -132,7 +138,7 @@ export default function LoginPage() {
           <Button
             type="button"
             variant="outline"
-            className="h-9 w-full rounded-[var(--radius-sm)] border-border font-semibold"
+            className="h-11 w-full rounded-md border-border font-semibold"
             onClick={handleGoogle}
             disabled={pendingGoogle}
           >
@@ -170,7 +176,7 @@ export default function LoginPage() {
                 placeholder="Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="h-10"
+                className="h-11"
                 required
               />
               <Input
@@ -179,12 +185,12 @@ export default function LoginPage() {
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="h-10"
+                className="h-11"
                 required
               />
               <Button
                 type="submit"
-                className="h-9 w-full rounded-[var(--radius-sm)] font-semibold"
+                className="h-11 w-full rounded-md font-semibold"
                 disabled={pendingPassword || !email || !password}
               >
                 {pendingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -201,7 +207,7 @@ export default function LoginPage() {
                 placeholder="Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="h-10"
+                className="h-11"
                 required
               />
               <Input
@@ -210,7 +216,7 @@ export default function LoginPage() {
                 placeholder="Password (min 8 characters)"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="h-10"
+                className="h-11"
                 required
               />
               <Input
@@ -219,12 +225,12 @@ export default function LoginPage() {
                 placeholder="Confirm password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="h-10"
+                className="h-11"
                 required
               />
               <Button
                 type="submit"
-                className="h-9 w-full rounded-[var(--radius-sm)] font-semibold"
+                className="h-11 w-full rounded-md font-semibold"
                 disabled={pendingRegister || !email || !password}
               >
                 {pendingRegister ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -243,12 +249,12 @@ export default function LoginPage() {
               placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="h-10"
+              className="h-11"
             />
             <Button
               type="button"
               variant="secondary"
-              className="h-9 w-full rounded-[var(--radius-sm)] border border-border font-semibold"
+              className="h-11 w-full rounded-md border border-border font-semibold"
               onClick={handleMagicLink}
               disabled={pendingMagic || !email.trim()}
             >
@@ -261,7 +267,7 @@ export default function LoginPage() {
           </TabsContent>
         </Tabs>
 
-        {message ? <p className="text-center text-sm text-[hsl(var(--primary))]">{message}</p> : null}
+        {message ? <p className="text-center text-sm text-primary">{message}</p> : null}
         {error ? <p className="text-center text-sm text-destructive">{error}</p> : null}
       </CardContent>
     </Card>

@@ -1,7 +1,7 @@
 export default function HomePage() {
   return (
     <div className="mx-auto grid max-w-ig gap-10 px-4 py-12 md:gap-14">
-      <section className="rounded-[var(--radius-lg)] border border-border bg-card px-6 py-10 text-center shadow-ig md:px-10 dark:shadow-ig-dark">
+      <section className="rounded-xl border border-border bg-card px-6 py-10 text-center shadow-sm md:px-10">
         <h1 className="text-[22px] font-semibold leading-tight tracking-tight text-foreground md:text-3xl">
           Stop losing money to fake COD orders
         </h1>
@@ -11,7 +11,7 @@ export default function HomePage() {
         </p>
         <a
           href="/login"
-          className="mt-8 inline-flex h-8 items-center justify-center rounded-[var(--radius-sm)] bg-[hsl(var(--primary))] px-4 text-sm font-semibold text-[hsl(var(--primary-foreground))] transition-colors hover:bg-[hsl(var(--primary-hover))]"
+          className="mt-8 inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
         >
           Get started free
         </a>

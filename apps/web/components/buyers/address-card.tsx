@@ -20,7 +20,7 @@ export function AddressCard({ data }: { data: AddressData }) {
 
   const quality = data.address_quality_score ?? 0;
   const qualityColor =
-    quality >= 75 ? "bg-[hsl(var(--primary))]" : quality >= 45 ? "bg-amber-500" : "bg-destructive";
+    quality >= 75 ? "bg-primary" : quality >= 45 ? "bg-amber-500" : "bg-destructive";
 
   const mapUrl =
     data.address_lat != null && data.address_lng != null

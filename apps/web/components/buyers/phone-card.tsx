@@ -20,7 +20,7 @@ export function PhoneCard({ data }: { data: PhoneData }) {
     statusClass = "text-muted-foreground";
   } else if (!validated) {
     statusLabel = "Not verified (add ABSTRACT_API_KEY on server)";
-    statusClass = "text-[hsl(var(--primary))]";
+    statusClass = "text-primary";
   } else if (data.phone_valid === true) {
     statusLabel = "Valid";
     statusClass = "text-emerald-600 dark:text-emerald-400";
