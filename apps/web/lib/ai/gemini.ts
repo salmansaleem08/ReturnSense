@@ -66,12 +66,17 @@ function parseAnalysisJson(raw: string): Record<string, unknown> {
 }
 
 function mapParsedToAiResult(parsed: Record<string, unknown>): AiStructuredResult {
+  const reasons = Array.isArray(parsed.ai_reasons)
+    ? (parsed.ai_reasons as string[])
+    : Array.isArray(parsed.reasons)
+      ? (parsed.reasons as string[])
+      : [];
   return {
     ai_trust_score: Number(parsed.trust_score ?? 50),
     ai_risk_level: String(parsed.risk_level ?? "medium"),
     ai_hesitation_detected: Boolean(parsed.hesitation_detected),
-    ai_buyer_seriousness: String(parsed.buyer_seriousness ?? "moderate"),
-    ai_reasons: Array.isArray(parsed.reasons) ? (parsed.reasons as string[]) : [],
+    ai_buyer_seriousness: String(parsed.buyer_seriousness ?? "medium"),
+    ai_reasons: reasons,
     positive_signals: Array.isArray(parsed.positive_signals) ? (parsed.positive_signals as string[]) : [],
     negative_signals: Array.isArray(parsed.negative_signals) ? (parsed.negative_signals as string[]) : [],
     recommendation: String(parsed.recommendation ?? "caution"),
@@ -103,13 +108,18 @@ function isGeminiCoerceOrPartsError(err: unknown) {
   return blob.includes("coerce") || blob.includes("cannot merge") || blob.includes("single json");
 }
 
-export async function analyzeWithGemini(messages: ChatMessage[], username: string): Promise<AiStructuredResult> {
+export async function analyzeWithGemini(
+  messages: ChatMessage[],
+  username: string,
+  phoneProvided?: string | null,
+  addressProvided?: string | null
+): Promise<AiStructuredResult> {
   if (!process.env.GEMINI_API_KEY?.trim()) {
-    return analyzeWithOpenRouter(messages, username);
+    return analyzeWithOpenRouter(messages, username, phoneProvided, addressProvided);
   }
 
   const model = getGeminiModel();
-  const prompt = buildAnalysisPrompt(messages, username);
+  const prompt = buildAnalysisPrompt(messages, username, phoneProvided, addressProvided);
 
   try {
     let result: GenerateContentResult;
@@ -121,25 +131,25 @@ export async function analyzeWithGemini(messages: ChatMessage[], username: strin
     } catch (genErr) {
       if (isGeminiCoerceOrPartsError(genErr)) {
         console.warn("Gemini generateContent failed (coerce/parts) — using OpenRouter fallback");
-        return await analyzeWithOpenRouter(messages, username);
+        return await analyzeWithOpenRouter(messages, username, phoneProvided, addressProvided);
       }
       throw genErr;
     }
 
     const rawText = getGeminiResponseText(result);
     if (!rawText?.trim()) {
-      return await analyzeWithOpenRouter(messages, username);
+      return await analyzeWithOpenRouter(messages, username, phoneProvided, addressProvided);
     }
 
     let parsed: Record<string, unknown>;
     try {
       parsed = parseAnalysisJson(rawText);
     } catch {
-      return await analyzeWithOpenRouter(messages, username);
+      return await analyzeWithOpenRouter(messages, username, phoneProvided, addressProvided);
     }
     return mapParsedToAiResult(parsed);
   } catch (err) {
     console.error("Gemini error:", err);
-    return await analyzeWithOpenRouter(messages, username);
+    return await analyzeWithOpenRouter(messages, username, phoneProvided, addressProvided);
   }
 }
