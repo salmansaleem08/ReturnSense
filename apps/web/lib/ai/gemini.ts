@@ -26,28 +26,29 @@ export function getGeminiModel() {
 export { SYSTEM_PROMPT, buildAnalysisPrompt };
 
 /**
- * IMPORTANT: call candidates/parts FIRST. `response.text()` throws
- * "Cannot coerce the result to a single JSON object" on some Gemini responses
- * even when JSON MIME mode is off — parts still contain the model output.
+ * Never call `response.text()` — the JS SDK throws
+ * "Cannot coerce the result to a single JSON object" when it cannot merge parts,
+ * even though `candidates[].content.parts[].text` has the model output.
  */
+function extractTextFromParts(parts: unknown[] | undefined): string {
+  if (!parts?.length) return "";
+  return parts
+    .map((p) => {
+      if (p && typeof p === "object" && "text" in p && typeof (p as { text?: unknown }).text === "string") {
+        return (p as { text: string }).text;
+      }
+      return "";
+    })
+    .join("");
+}
+
 function getGeminiResponseText(result: GenerateContentResult): string {
-  const parts = result.response.candidates?.[0]?.content?.parts;
-  if (parts?.length) {
-    const joined = parts
-      .map((p) => {
-        if (p && typeof p === "object" && "text" in p && typeof (p as { text?: unknown }).text === "string") {
-          return (p as { text: string }).text;
-        }
-        return "";
-      })
-      .join("");
-    if (joined.trim()) return joined;
+  const chunks: string[] = [];
+  for (const c of result.response.candidates ?? []) {
+    const raw = extractTextFromParts(c?.content?.parts as unknown[] | undefined);
+    if (raw.trim()) chunks.push(raw);
   }
-  try {
-    return result.response.text();
-  } catch {
-    return "";
-  }
+  return chunks.join("\n");
 }
 
 function parseAnalysisJson(raw: string): Record<string, unknown> {
@@ -79,12 +80,34 @@ function mapParsedToAiResult(parsed: Record<string, unknown>): AiStructuredResul
   };
 }
 
-function isGeminiCoerceError(err: unknown) {
-  const msg = err instanceof Error ? err.message : String(err);
-  return msg.includes("Cannot coerce the result to a single JSON object");
+/** Walk Error.cause and stringify nested API errors so we match SDK failures reliably. */
+function collectErrorText(err: unknown, depth = 0): string {
+  if (err == null || depth > 6) return "";
+  if (typeof err === "string") return err;
+  if (err instanceof Error) {
+    const cause = (err as Error & { cause?: unknown }).cause;
+    return err.message + (cause ? ` ${collectErrorText(cause, depth + 1)}` : "");
+  }
+  if (typeof err === "object") {
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return String(err);
+    }
+  }
+  return String(err);
+}
+
+function isGeminiCoerceOrPartsError(err: unknown) {
+  const blob = collectErrorText(err).toLowerCase();
+  return blob.includes("coerce") || blob.includes("cannot merge") || blob.includes("single json");
 }
 
 export async function analyzeWithGemini(messages: ChatMessage[], username: string): Promise<AiStructuredResult> {
+  if (!process.env.GEMINI_API_KEY?.trim()) {
+    return analyzeWithOpenRouter(messages, username);
+  }
+
   const model = getGeminiModel();
   const prompt = buildAnalysisPrompt(messages, username);
 
@@ -96,8 +119,8 @@ export async function analyzeWithGemini(messages: ChatMessage[], username: strin
         contents: [{ role: "user", parts: [{ text: prompt }] }]
       });
     } catch (genErr) {
-      if (isGeminiCoerceError(genErr)) {
-        console.warn("Gemini generateContent coerce error — using OpenRouter fallback");
+      if (isGeminiCoerceOrPartsError(genErr)) {
+        console.warn("Gemini generateContent failed (coerce/parts) — using OpenRouter fallback");
         return await analyzeWithOpenRouter(messages, username);
       }
       throw genErr;
