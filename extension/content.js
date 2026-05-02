@@ -1200,7 +1200,7 @@ function tryInjectButton() {
     const btn = document.createElement("button");
     btn.id = "rs-analyze-btn";
     btn.type = "button";
-    btn.className = "rs-btn";
+    btn.className = "rs-analyze-btn";
     btn.textContent = "🛡 Analyze Buyer";
     btn.title = "ReturnSense — analyze this buyer";
     btn.addEventListener("click", () => void launchBuyerAnalysis());
