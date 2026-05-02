@@ -1489,27 +1489,12 @@ async function submitForAnalysis({ messages, username, phone, address }) {
 }
 
 /**
- * @param {Record<string, unknown>} result
+ * Attribution uncertainty is still handled server-side (prompts + score adjustment).
+ * Intentionally no panel banner — sellers found it alarming while analysis already proceeds.
+ * @param {Record<string, unknown>} _result
  */
-function renderAttributionWarningBanner(result) {
-  if (result?.attribution_unreliable !== true) return "";
-  const q = result?.attribution_quality;
-  let detail =
-    "We could not reliably tell your messages from the buyer's. Treat the score as less precise.";
-  if (q && typeof q === "object") {
-    const reason = String(q.reason ?? "");
-    if (reason === "heavy_skew") {
-      detail =
-        "Almost all lines were labeled as one side. Instagram layout may have skewed direction — use judgment.";
-    } else if (reason === "one_side_missing") {
-      detail =
-        "High-confidence labels are missing for one side (buyer or seller). Direction may be wrong.";
-    }
-  }
-  return `<div class="rs-attrib-warning" role="alert" style="margin-bottom:12px;padding:12px 14px;border-radius:10px;background:#FFFBEB;border:1px solid #F59E0B;color:#78350F;font-size:13px;line-height:1.45;">
-    <div style="font-weight:700;margin-bottom:4px;">Message direction unreliable</div>
-    <div style="font-size:12px;opacity:0.95;">${escapeHtml(detail)}</div>
-  </div>`;
+function renderAttributionWarningBanner(_result) {
+  return "";
 }
 
 /**
