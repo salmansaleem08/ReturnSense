@@ -44,3 +44,6 @@ extension/popup-config.js
 
 # Internal docs (must never be pushed)
 ReturnSense_Blueprint.docx
+
+# Private investor pitch (local edits only)
+INVESTOR_PITCH.local.txt
