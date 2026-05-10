@@ -51,43 +51,6 @@ export const GET = withAuth(async ({ user }) => {
     const returned = safeRows.filter((row) => row.outcome === "returned").length;
     const returnRate = delivered + returned > 0 ? Math.round((returned / (delivered + returned)) * 100) : 0;
 
-    const since7 = new Date();
-    since7.setDate(since7.getDate() - 6);
-    since7.setHours(0, 0, 0, 0);
-    const { data: trendRows } = await supabaseAdmin
-      .from("buyers")
-      .select("created_at, final_trust_score, final_risk_level")
-      .eq("seller_id", user.id)
-      .is("deleted_at", null)
-      .gte("created_at", since7.toISOString());
-
-    const riskBucketsByDay: Record<string, { sum: number; n: number; high: number }> = {};
-    for (let i = 6; i >= 0; i -= 1) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      d.setHours(0, 0, 0, 0);
-      riskBucketsByDay[d.toISOString().slice(0, 10)] = { sum: 0, n: 0, high: 0 };
-    }
-    for (const row of trendRows ?? []) {
-      const day = new Date(String(row.created_at)).toISOString().slice(0, 10);
-      if (!(day in riskBucketsByDay)) continue;
-      const sc = row.final_trust_score;
-      const score = typeof sc === "number" ? sc : 0;
-      riskBucketsByDay[day].sum += score;
-      riskBucketsByDay[day].n += 1;
-      const rk = String(row.final_risk_level ?? "").toLowerCase();
-      if (rk === "high" || rk === "critical") {
-        riskBucketsByDay[day].high += 1;
-      }
-    }
-    const risk_trend_7d = Object.entries(riskBucketsByDay).map(([fullDate, v]) => ({
-      day: fullDate.slice(5),
-      fullDate,
-      avg_trust: v.n > 0 ? Math.round(v.sum / v.n) : null,
-      high_risk_count: v.high,
-      analyses_count: v.n
-    }));
-
     const riskBuckets = { low: 0, medium: 0, high: 0, critical: 0 };
     for (const row of safeRows) {
       const k = ((row.final_risk_level as string) || "critical").toLowerCase();
@@ -106,8 +69,7 @@ export const GET = withAuth(async ({ user }) => {
         analyses_limit: quota.limit,
         delivered_count: delivered,
         returned_count: returned,
-        risk_distribution: riskBuckets,
-        risk_trend_7d
+        risk_distribution: riskBuckets
       }
     );
   } catch (error) {

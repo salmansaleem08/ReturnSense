@@ -2,17 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import {
-  Bar,
-  CartesianGrid,
-  ComposedChart,
-  Legend,
-  Line,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis
-} from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { DashboardHero } from "@/components/dashboard/DashboardHero";
 import { StatsCard } from "@/components/stats-card";
@@ -40,13 +30,12 @@ type StatsPayload = {
   analyses_limit?: number;
   delivered_count?: number;
   returned_count?: number;
-  risk_trend_7d?: Array<{
-    day: string;
-    fullDate: string;
-    avg_trust: number | null;
-    high_risk_count: number;
-    analyses_count: number;
-  }>;
+  risk_distribution?: {
+    low: number;
+    medium: number;
+    high: number;
+    critical: number;
+  };
 };
 
 export default function DashboardPage() {
@@ -83,7 +72,17 @@ export default function DashboardPage() {
     load();
   }, [supabase]);
 
-  const chartData = stats?.risk_trend_7d ?? [];
+  const riskDist = stats?.risk_distribution;
+  const portfolioBars =
+    riskDist != null
+      ? [
+          { level: "Low", count: riskDist.low, fill: "var(--chart-2)" },
+          { level: "Medium", count: riskDist.medium, fill: "var(--chart-4)" },
+          { level: "High", count: riskDist.high, fill: "var(--chart-1)" },
+          { level: "Critical", count: riskDist.critical, fill: "var(--chart-5)" }
+        ]
+      : [];
+  const portfolioTotal = portfolioBars.reduce((s, r) => s + r.count, 0);
 
   return (
     <div className="space-y-6 text-foreground">
@@ -125,73 +124,56 @@ export default function DashboardPage() {
       </section>
 
       <section className="motion-safe:animate-[rs-fade-in_0.5s_ease-out] rounded-xl border border-border bg-card p-4">
-        <h2 className="mb-1 text-sm font-semibold text-foreground">Risk trend</h2>
+        <h2 className="mb-1 text-sm font-semibold text-foreground">Risk portfolio</h2>
         <p className="mb-3 text-xs text-muted-foreground">
-          Last 7 days: daily average trust score (line) and count of high or critical risk analyses (bars).
+          All-time count of analyses by final risk level. Totals stay meaningful even when you haven&apos;t run new analyses
+          recently.
         </p>
         {loading ? (
           <Skeleton className="h-[200px] w-full rounded-[var(--radius-md)]" />
+        ) : portfolioTotal === 0 ? (
+          <p className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground">
+            No analyses yet — levels will appear here after your first buyer reports.
+          </p>
         ) : (
-          <div className="h-[240px] w-full">
+          <div className="h-[220px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <BarChart data={portfolioBars} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis
-                  dataKey="day"
+                  dataKey="level"
                   tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
                   axisLine={{ stroke: "var(--border)" }}
                 />
                 <YAxis
-                  yAxisId="trust"
-                  domain={[0, 100]}
-                  width={36}
-                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                  axisLine={{ stroke: "var(--border)" }}
-                  label={{ value: "Trust", angle: -90, position: "insideLeft", fill: "var(--muted-foreground)", fontSize: 10 }}
-                />
-                <YAxis
-                  yAxisId="riskn"
-                  orientation="right"
                   allowDecimals={false}
                   width={36}
                   tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
                   axisLine={{ stroke: "var(--border)" }}
-                  label={{ value: "High/crit.", angle: 90, position: "insideRight", fill: "var(--muted-foreground)", fontSize: 10 }}
+                  label={{
+                    value: "Analyses",
+                    angle: -90,
+                    position: "insideLeft",
+                    fill: "var(--muted-foreground)",
+                    fontSize: 10
+                  }}
                 />
                 <Tooltip
+                  cursor={{ fill: "var(--muted)", opacity: 0.15 }}
                   contentStyle={{
                     border: "1px solid var(--border)",
                     borderRadius: 8,
                     fontSize: 12,
                     background: "var(--card)"
                   }}
-                  formatter={(value, name) => {
-                    if (name === "Avg trust" && (value === null || value === undefined)) {
-                      return ["No analyses that day", "Avg trust"];
-                    }
-                    return [value, name];
-                  }}
+                  formatter={(value) => [`${value ?? 0}`, "Analyses"]}
                 />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar
-                  yAxisId="riskn"
-                  dataKey="high_risk_count"
-                  name="High / critical count"
-                  fill="var(--chart-1)"
-                  radius={[4, 4, 0, 0]}
-                  maxBarSize={28}
-                />
-                <Line
-                  yAxisId="trust"
-                  type="monotone"
-                  dataKey="avg_trust"
-                  name="Avg trust"
-                  stroke="var(--chart-2)"
-                  strokeWidth={2}
-                  dot={{ r: 3, fill: "var(--chart-2)" }}
-                  connectNulls={false}
-                />
-              </ComposedChart>
+                <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={56}>
+                  {portfolioBars.map((entry) => (
+                    <Cell key={`cell-${entry.level}`} fill={entry.fill} />
+                  ))}
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
           </div>
         )}

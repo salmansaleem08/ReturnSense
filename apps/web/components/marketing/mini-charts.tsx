@@ -1,15 +1,14 @@
 "use client";
 
 import { useId } from "react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-const trend = [
-  { m: "Jan", v: 12 },
-  { m: "Feb", v: 18 },
-  { m: "Mar", v: 24 },
-  { m: "Apr", v: 31 },
-  { m: "May", v: 28 },
-  { m: "Jun", v: 42 }
+/** Sample portfolio mix for marketing (illustrative — not user data). */
+const samplePortfolio = [
+  { level: "Low", n: 14, fill: "hsl(var(--rs-g2))" },
+  { level: "Med", n: 9, fill: "hsl(var(--rs-g3))" },
+  { level: "High", n: 5, fill: "hsl(var(--rs-g1))" },
+  { level: "Crit", n: 2, fill: "hsl(var(--rs-accent-v))" }
 ];
 
 const riskMixData = [
@@ -29,23 +28,15 @@ const weekly = [
   { day: "S", n: 14 }
 ];
 
-/** Illustrative-only charts for marketing / auth (not live data). */
-export function MarketingTrendChart({ compact }: { compact?: boolean }) {
-  const h = compact ? 120 : 160;
-  const gid = useId().replace(/:/g, "");
-  const fillId = `rsFillTrend-${gid}`;
+/** Illustrative risk mix bars for marketing / auth (sample counts, not live data). */
+export function MarketingPortfolioSample({ compact }: { compact?: boolean }) {
+  const h = compact ? 120 : 152;
   return (
     <div className="w-full" style={{ height: h }}>
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={trend} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-          <defs>
-            <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="hsl(var(--rs-g1))" stopOpacity={0.38} />
-              <stop offset="100%" stopColor="hsl(var(--rs-g3))" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" className="stroke-border/60" />
-          <XAxis dataKey="m" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
+        <BarChart data={samplePortfolio} margin={{ top: 4, right: 4, left: -12, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" vertical={false} />
+          <XAxis dataKey="level" tick={{ fontSize: 9, fill: "var(--muted-foreground)" }} />
           <YAxis hide />
           <Tooltip
             contentStyle={{
@@ -55,14 +46,12 @@ export function MarketingTrendChart({ compact }: { compact?: boolean }) {
               fontSize: "12px"
             }}
           />
-          <Area
-            type="monotone"
-            dataKey="v"
-            stroke="hsl(var(--rs-g2))"
-            fill={`url(#${fillId})`}
-            strokeWidth={2}
-          />
-        </AreaChart>
+          <Bar dataKey="n" radius={[4, 4, 0, 0]} maxBarSize={compact ? 28 : 36}>
+            {samplePortfolio.map((e) => (
+              <Cell key={e.level} fill={e.fill} />
+            ))}
+          </Bar>
+        </BarChart>
       </ResponsiveContainer>
     </div>
   );

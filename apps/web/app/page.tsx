@@ -3,7 +3,7 @@ import Link from "next/link";
 import { CheckCircle2, MapPin, MessageSquare, Phone, Shield, Sparkles, TrendingUp } from "lucide-react";
 
 import { PageAmbientBg } from "@/components/layout/page-ambient";
-import { MarketingBarSpark, MarketingRiskDonut, MarketingTrendChart } from "@/components/marketing/mini-charts";
+import { MarketingBarSpark, MarketingPortfolioSample, MarketingRiskDonut } from "@/components/marketing/mini-charts";
 import { PublicHeader } from "@/components/marketing/public-header";
 
 export const metadata: Metadata = {
@@ -142,8 +142,8 @@ export default function HomePage() {
           <div className="card-hover relative rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-border bg-muted/40 p-3 dark:bg-muted/25">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Illustrative trend</p>
-                <MarketingTrendChart />
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Risk mix (sample)</p>
+                <MarketingPortfolioSample />
               </div>
               <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-muted/40 p-3 dark:bg-muted/25">
                 <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Risk mix</p>
