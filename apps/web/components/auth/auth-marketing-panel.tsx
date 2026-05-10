@@ -5,7 +5,7 @@ import { MarketingBarSpark, MarketingRiskDonut, MarketingTrendChart } from "@/co
 /** Illustrative charts + product copy for auth pages (not live account data). */
 export function AuthMarketingPanel() {
   return (
-    <div className="relative flex min-h-[320px] flex-col justify-between rounded-2xl border border-border bg-muted/40 p-6 lg:min-h-full dark:bg-muted/25">
+    <div className="relative flex min-h-[320px] flex-col justify-between rounded-xl border border-border bg-gradient-to-br from-primary/10 via-background to-primary/5 p-6 lg:min-h-full">
       <div>
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">ReturnSense</p>
         <h2 className="mt-2 text-2xl font-semibold leading-tight text-foreground">See risk before you ship COD</h2>
