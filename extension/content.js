@@ -1,5 +1,6 @@
 const API_BASE = "https://return-sense-web.vercel.app";
 
+/** Same artwork as `apps/web/public/shopping-bag.png`; listed in web_accessible_resources for IG pages. */
 const RS_BRAND_LOGO =
   typeof chrome !== "undefined" && chrome.runtime?.getURL
     ? chrome.runtime.getURL("icons/shopping-bag.png")
@@ -1268,7 +1269,7 @@ function showExtractionLoadingPanel() {
   panel.innerHTML = `
     <div id="rs-panel-header">
       <div class="rs-header-logo">
-        <img src="${RS_BRAND_LOGO}" width="28" height="28" alt="" class="rs-logo-img" />
+        <img src="${RS_BRAND_LOGO}" width="32" height="32" alt="ReturnSense" class="rs-logo-img" />
         <span class="rs-header-title">ReturnSense</span>
       </div>
       <button type="button" class="rs-close-btn" id="rs-close-extract" aria-label="Close">&#x2715;</button>
@@ -1320,7 +1321,7 @@ function openAnalysisPanel(username, messages, detectedPhone, detectedAddress) {
   panel.innerHTML = `
     <div id="rs-panel-header">
       <div class="rs-header-logo">
-        <img src="${RS_BRAND_LOGO}" width="28" height="28" alt="" class="rs-logo-img" />
+        <img src="${RS_BRAND_LOGO}" width="32" height="32" alt="ReturnSense" class="rs-logo-img" />
         <span class="rs-header-title">ReturnSense</span>
       </div>
       <button type="button" class="rs-close-btn" id="rs-close-panel" aria-label="Close">&#x2715;</button>

@@ -47,3 +47,6 @@ ReturnSense_Blueprint.docx
 
 # Private investor pitch (local edits only)
 INVESTOR_PITCH.local.txt
+
+# Internal pipeline notes (local only; do not commit)
+ANALYSIS_PIPELINE.local.txt
